@@ -1,0 +1,208 @@
+---
+title: "Variable importance for Envt-TAC 6mo analyses"
+author: "Caitlin Hemlock"
+date: "Updated `r Sys.time()`"
+output: 
+  html_document:
+    theme: default
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+---
+
+## Preamble
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+```{r}
+rm(list=ls())
+library(gtsummary)
+library(kableExtra)
+library(ggplot2)
+library(randomForest)
+library(dplyr)
+library(viridis)
+library(caret)
+library(geepack)
+library(glmnet)
+
+theme_set(theme_bw())
+
+#set output folder
+#setwd("~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/CH tables figs")
+```
+
+## Data Management
+
+### Load data
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#read in Nicolette's dataset
+#d <- readRDS("~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Export_files/6mo analysis data.rds") 
+d <- readRDS("Export_files/6mo analysis data.rds") 
+
+d <- d %>%
+  select(-anyvirus) %>%
+  dplyr::rename(comm_type = Community.Type,
+         animal_score = animal_score_overall_child,
+         vacc4m = four_month_vaccines,
+         vacc6m = six_month_vaccines,
+         age_day = age_in_days,
+         anyinfection = Any_infection_noCOVID,
+         coinfection = Any_co_infection_noCOVID,
+         anyvirus = Any_virus_noCOVID,
+         numpathogens = Any_infection_noCOVID_number)
+```
+
+```{r}
+#select exposures of interest
+ # exposures <- c("hhcrowd", "floors","comm_type", "animal_score", "toilet_type",
+ #               "water_type","wat_detect","hygiene", "vacc4m", "vacc6m",
+ #               "mhand_detect", "chand_detect", "rainy", "storewat", "vagbirth")
+
+exposures <- c("hhcrowd", "imp_floors","comm_type", "animal_score",  
+               "wat_detect","hygiene","imp_toilet","imp_water_jmp",
+               "mhand_detect", "chand_detect", "rainy", "storewat")
+
+#imp_water_piped, imp_water_cait, imp_water_jmp
+
+#select covariates for all models
+# covariates <- c("age_day", "male", "excl_bf", "hhwealth", "momedu_cat",  "momage",
+#                 "birthorder", "hfiacat", "m_eth_afro")
+
+covariates <- c("age_day", "male", "excl_bf", "hhwealth", "momedu_cat",  "momage",
+                "birthorder", "hfiacat", "m_eth_afro", "vacc4m", "vagbirth")
+
+#select outcomes
+outcomes <- c("anyinfection", "coinfection", "numpathogens", "anyvirus",
+               "anybacteria", "anyparasite",
+               #"Ascaris", #1
+               "Astrovirus", #13
+               #"Cyclospora_cayetanesis", #0
+               #"Entamoeba", #0
+               "Enterovirus", #111
+               "Giardia_18S", #15
+               "Rotavirus", #15
+               #"Sapovirus", #6
+               #"Trichuris", #2
+               "Adenovirus", #45
+               #"Cryptosporidium", #6
+               "Norovirus", #20
+               "Salmonella", #25
+               "Campylobacter", #38
+               "EAEC", #171
+               "DAEC", #85
+               "tEPEC", #21
+               "aEPEC", #78
+               "ETEC", #47
+               "EIEC_or_Shigella") #14
+               #"EHEC", #5
+               #"STEC") #2
+
+
+# outcomes <- c("anyinfection", "coinfection", "numpathogens", "anyvirus", 
+#                "anybacteria", "anyparasite")
+
+```
+
+## Relative importance of exposure variables
+```{r}
+#create data set
+d2 <- d %>%
+  select(house_ID, exposures, outcomes)
+
+#complete cases only
+complete <- d2[complete.cases(d2),]
+
+#denote categorical variables that need dummies created
+cat <- c("comm_type", "hfiacat", "birthorder")
+
+encode <- fastDummies:: dummy_cols(complete, select_columns = cat,
+                                   #remove original categorical variables
+                                   remove_selected_columns = T,
+                                   #keep all dummies (vs. drop one)
+                                   remove_most_frequent_dummy = F,
+                                   #ignore missing vars since we performed CC
+                                   ignore_na = T) %>%
+  #rename variables that had spaces in values
+  dplyr::rename(urban = `comm_type_urban`,
+         semiurban = `comm_type_semi-urban`,
+         ruralroad = `comm_type_rural - road`,
+         ruralriver = `comm_type_rural - river`) %>%
+  #select(house_ID, Rotavirus, hhcrowd:storewat, urban:ruralriver) #adjust based on outcome
+  select(house_ID, anyinfection:EIEC_or_Shigella, hhcrowd:storewat, urban:ruralriver)
+
+# encode <- encode %>%
+#   mutate(across(outcomes[-3], as.factor))
+
+```
+
+## Elastic net
+```{r}
+vi_scores <- NULL
+parameters <- NULL
+
+for(i in outcomes){
+  print(i)
+  lasso <- encode %>%
+    dplyr::select(-house_ID, -c(outcomes[outcomes != i]))
+  
+  #separate Y variable
+  score <- lasso[[i]]
+  
+  #create matrix of indicator variables
+  x <- as.matrix(lasso %>% select(-i))
+  
+  #run LASSO regression
+  best.a <- NULL
+  set.seed(123)
+  for(a in seq(0,1,0.01)){
+      if(i == "numpathogens"){
+        cvfit <- glmnet::cv.glmnet(x, score, family = "poisson", 
+                           alpha = a, type.measure = "mse", nfolds = 5, standardize = T)
+      } else{
+        cvfit <- glmnet::cv.glmnet(x, score, family = "binomial", 
+                           alpha = a, type.measure = "mse", nfolds = 5, standardize = T)
+      }
+    
+    best.a <- rbind(best.a,
+                    cbind(alpha = a, MSE = cvfit$cvm[cvfit$lambda == cvfit$lambda.min]))
+    
+  }
+  
+  best.a <- as.data.frame(best.a)
+  
+  if(i == "numpathogens"){
+        mod <- glmnet::glmnet(x, score, family = "poisson", 
+                              alpha = 0,                           #ALPHA SET TO 0 FOR RIDGE
+                              standardize = T)
+        cvfit <- glmnet::cv.glmnet(x, score, family = "poisson", 
+                                   alpha = 0,                      #ALPHA SET TO 0 FOR RIDGE
+                                   type.measure = "mse", nfolds = 5, standardize = T)
+      } else{
+        mod <- glmnet::glmnet(x, score, family = "binomial", 
+                              alpha = 0,                           #ALPHA SET TO 0 FOR RIDGE
+                              standardize = T)
+        cvfit <- glmnet::cv.glmnet(x, score, family = "binomial", 
+                                   alpha = 0,                       #ALPHA SET TO 0 FOR RIDGE
+                                   type.measure = "mse", nfolds = 5, standardize = T) 
+      }
+  
+  parameters <- rbind(parameters, cbind(outcome = i, 
+                            alpha = best.a$alpha[best.a$MSE == min(best.a$MSE)],   #<- USE THIS INSTEAD FOR ALPHA ABOVE FOR ELASTIC NET
+                            lambda = cvfit$lambda.min))
+  
+  #extract variable importance
+  vi_scores.temp <- vip::vi(mod, lambda = cvfit$lambda.min, method = "model")
+  vi_scores <- rbind(vi_scores, cbind(outcome = i, vi_scores.temp))
+}
+
+saveRDS(vi_scores, "Export_files/vi_scores_20240614.rds") 
+```

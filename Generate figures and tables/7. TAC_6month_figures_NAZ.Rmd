@@ -1,0 +1,2101 @@
+---
+title: "TAC_16S_6month_figures"
+author: "Nicolette Zhou"
+date: "2023-06-14"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#clear R env, load libraries, set theme
+```{r setup, include=FALSE}
+rm(list = ls())
+
+library(ggplot2)
+#library(ggpmisc)
+library(ggpubr)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(scales)
+library(kableExtra)
+library(qcc)
+library(splitstackshape)
+library(janitor)
+library(readxl)
+library(viridisLite)
+library(viridis)
+library(lme4)
+library(effects)
+library(broom.mixed)
+library(sjmisc)
+library(sjPlot)
+library(patchwork)
+library(RColorBrewer)
+library(rstatix)
+library(glmmTMB)
+library(emmeans)
+library(gridExtra)
+library(cowplot)
+library(stringr)
+library(flextable)
+library(gtsummary)
+library(caret)
+library(geepack)
+
+theme_set(theme_bw())
+options(digits = 3)
+options(dplyr.summarise.inform=FALSE)
+```
+
+#import files
+```{r}
+#Import Master data file
+TAC_pathogens <- readRDS("Export_files/6mo analysis data.rds")
+
+sample_subset <- TAC_pathogens%>%
+  select(house_ID)
+  
+TAC_PA <- read.csv("UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/01-Master_data/Data_files/TAC_data_Master_analyzed_samples_targets.csv", na.strings=c("Undetermined","NA"))%>%
+  subset(Age=="06m")
+
+TAC_PA_subset<-sample_subset%>%
+  left_join(TAC_PA, by=c("house_ID"="HH.ID"))%>%
+  select(-X)
+  
+```
+
+#maled import and format
+```{r}
+maled_TAC <- read.csv("Import_files/maled_TAC.csv")
+maled_location <- read.csv("Import_files/maled_location.csv")
+
+maled <- maled_TAC%>%
+  left_join(maled_location, by=c("Household_ID"))%>%
+  subset(Sample.type..OBI_0100051. == "Stool")%>%
+  subset(Target.month.for.stool.collection..EUPATH_0011851. == 6)%>%
+  subset(Stool.collected.in.target.window..EUPATH_0010873. != "No")%>%
+  dplyr::rename(Campylobacter = Campylobacter..by.TAC.result..Ct.value...EUPATH_0015338.,
+         Campylobacter_jejuni_coli = Campylobacter.jejuni.or.C..coli..by.TAC.result..Ct.value...EUPATH_0015341.,
+         EAEC_aaiC = EAEC.aaiC..by.TAC.result..Ct.value...EUPATH_0015346.,
+         EAEC_aatA = EAEC.aatA..by.TAC.result..Ct.value...EUPATH_0015348., 
+         EAEC_aggR = EAEC.aggR..by.TAC.result..Ct.value...EUPATH_0015349.,
+         EPEC_eae = EPEC.eae..by.TAC.result..Ct.value...EUPATH_0011857.,
+         EPEC_bfpA = EPEC.bfpA..by.TAC.result..Ct.value...EUPATH_0015353.,
+         ETEC_LT = ETEC.LT.pos..by.TAC.result..Ct.value...EUPATH_0015355.,
+         ETEC_STh = ETEC.STh..by.TAC.result..Ct.value...EUPATH_0015356.,
+         ETEC_STp = ETEC.STp..by.TAC.result..Ct.value...EUPATH_0015357.,
+         STEC_stx1 = STEC.stx1..by.TAC.result..Ct.value...EUPATH_0015384.,
+         STEC_stx2 = STEC.stx2..by.TAC.result..Ct.value...EUPATH_0015385.,
+         Salmonella = Salmonella..by.TAC.result..Ct.value...EUPATH_0015381.,
+         EIEC_or_Shigella = Shigella.or.EIEC..by.TAC.result..Ct.value...EUPATH_0015383.,
+         Adenovirus = Adenovirus..by.TAC.result..Ct.value...EUPATH_0015330.,
+         Adenovirus_40_41 = Adenovirus.40.41..by.TAC.result..Ct.value...EUPATH_0015331.,
+         Astrovirus = Astrovirus..by.TAC.result..Ct.value...EUPATH_0015335.,
+         Rotavirus = Rotavirus..post.vax.corrected...by.TAC.result..Ct.value...EUPATH_0011869.,
+         Norovirus_GI = Norovirus.GI..by.TAC.result..Ct.value...EUPATH_0015364.,
+         Norovirus_GI_1 = Norovirus.GI.1..by.TAC.result..Ct.value...EUPATH_0011866.,
+         Norovirus_GII = Norovirus.GII..by.TAC.result..Ct.value...EUPATH_0015365.,
+         Norovirus_GII_4 = Norovirus.GII.4..by.TAC.result..Ct.value...EUPATH_0011867.,
+         Sapovirus = Sapovirus..by.TAC.result..Ct.value...EUPATH_0015382.,
+         Ascaris = Ascaris..by.TAC.result..Ct.value...EUPATH_0015334.,
+         Cryptosporidium = Cryptosporidium..by.TAC.result..Ct.value...EUPATH_0015342.,
+         Cryptosporidium_hominis = Cryptosporidium.hominis..by.TAC.result..Ct.value...EUPATH_0015343.,
+         Cryptosporidium_parvum = Cryptosporidium.parvum..by.TAC.result..Ct.value...EUPATH_0015344.,
+         Cyclospora = Cyclospora..by.TAC.result..Ct.value...EUPATH_0015345.,
+         Entamoeba_histolytica = Entamoeba.histolytica..by.TAC.result..Ct.value...EUPATH_0015351.,
+         Giardia = Giardia..by.TAC.result..Ct.value...EUPATH_0015360.,
+         Trichuris = Trichuris.trichiura..by.TAC.result..Ct.value...EUPATH_0015387.,
+         Sample_type = Sample.type..OBI_0100051.,
+         Country = Country..ENVO_00000009.,
+         Urbanicity = Urban.or.rural.site..EUPATH_0011928.)%>%
+  select(Sample_ID, Participant_repeated_measure_ID, Participant_ID, Household_ID, Sample.ID..OBI_0001616., Sample_type, Country, Urbanicity, Campylobacter, Campylobacter_jejuni_coli, EAEC_aaiC, EAEC_aatA, EAEC_aggR, EPEC_bfpA, EPEC_eae, ETEC_LT, ETEC_STh, ETEC_STp, STEC_stx1, STEC_stx2, Salmonella, EIEC_or_Shigella, Adenovirus, Adenovirus_40_41, Astrovirus, Norovirus_GI, Norovirus_GI_1, Norovirus_GII, Norovirus_GII_4, Rotavirus, Sapovirus, Ascaris, Cryptosporidium, Cryptosporidium_hominis, Cryptosporidium_parvum, Cyclospora, Entamoeba_histolytica, Giardia, Trichuris)
+
+maled_PA <- maled%>%
+  mutate(Campylobacter = case_when(Campylobacter == 35 ~ 0, Campylobacter < 35 ~ 1, is.na(Campylobacter) ~ NA),
+         Campylobacter_jejuni_coli = case_when(Campylobacter_jejuni_coli == 35 ~ 0, Campylobacter_jejuni_coli < 35 ~ 1, is.na(Campylobacter_jejuni_coli) ~ NA),
+         EAEC_aaiC = case_when(EAEC_aaiC == 35 ~ 0, EAEC_aaiC < 35 ~ 1, is.na(EAEC_aaiC) ~ NA),
+         EAEC_aatA = case_when(EAEC_aatA == 35 ~ 0, EAEC_aatA < 35 ~ 1, is.na(EAEC_aatA) ~ NA),
+         EAEC_aggR = case_when(EAEC_aggR == 35 ~ 0, EAEC_aggR < 35 ~ 1, is.na(EAEC_aggR) ~ NA),
+         EPEC_bfpA = case_when(EPEC_bfpA == 35 ~ 0, EPEC_bfpA < 35 ~ 1, is.na(EPEC_bfpA) ~ NA),
+         EPEC_eae = case_when(EPEC_eae == 35 ~ 0, EPEC_eae < 35 ~ 1, is.na(EPEC_eae) ~ NA),
+         ETEC_LT = case_when(ETEC_LT == 35 ~ 0, ETEC_LT < 35 ~ 1, is.na(ETEC_LT) ~ NA),
+         ETEC_STh = case_when(ETEC_STh == 35 ~ 0, ETEC_STh < 35 ~ 1, is.na(ETEC_STh) ~ NA),
+         ETEC_STp = case_when(ETEC_STp == 35 ~ 0, ETEC_STp < 35 ~ 1, is.na(ETEC_STp) ~ NA),
+         STEC_stx1 = case_when(STEC_stx1 == 35 ~ 0, STEC_stx1 < 35 ~ 1, is.na(STEC_stx1) ~ NA),
+         STEC_stx2 = case_when(STEC_stx2 == 35 ~ 0, STEC_stx2 < 35 ~ 1, is.na(STEC_stx2) ~ NA),
+         Salmonella = case_when(Salmonella == 35 ~ 0, Salmonella < 35 ~ 1, is.na(Salmonella) ~ NA),
+         EIEC_or_Shigella = case_when(EIEC_or_Shigella == 35 ~ 0, EIEC_or_Shigella < 35 ~ 1, is.na(EIEC_or_Shigella) ~ NA),
+         Adenovirus = case_when(Adenovirus == 35 ~ 0, Adenovirus < 35 ~ 1, is.na(Adenovirus) ~ NA),
+         Adenovirus_40_41 = case_when(Adenovirus_40_41 == 35 ~ 0, Adenovirus_40_41 < 35 ~ 1, is.na(Adenovirus_40_41) ~ NA),
+         Astrovirus = case_when(Astrovirus == 35 ~ 0, Astrovirus < 35 ~ 1, is.na(Astrovirus) ~ NA),
+         Norovirus_GI = case_when(Norovirus_GI == 35 ~ 0, Norovirus_GI < 35 ~ 1, is.na(Norovirus_GI) ~ NA),
+         Norovirus_GI_1 = case_when(Norovirus_GI_1 == 40 ~ 0, Norovirus_GI_1 < 40 ~ 1, is.na(Norovirus_GI_1) ~ 0),
+         Norovirus_GII = case_when(Norovirus_GII == 35 ~ 0, Norovirus_GII < 35 ~ 1, is.na(Norovirus_GII) ~ NA),
+         Norovirus_GII_4 = case_when(Norovirus_GII_4 == 40 ~ 0, Norovirus_GII_4 < 40 ~ 1, is.na(Norovirus_GII_4) ~ 0),
+         Rotavirus = case_when(Rotavirus == 35 ~ 0, Rotavirus < 35 ~ 1, is.na(Rotavirus) ~ NA),
+         Sapovirus = case_when(Sapovirus == 35 ~ 0, Sapovirus < 35 ~ 1, is.na(Sapovirus) ~ NA),
+         Ascaris = case_when(Ascaris == 35 ~ 0, Ascaris < 35 ~ 1, is.na(Ascaris) ~ NA),
+         Cryptosporidium = case_when(Cryptosporidium == 35 ~ 0, Cryptosporidium < 35 ~ 1, is.na(Cryptosporidium) ~ NA),
+         Cryptosporidium_hominis = case_when(Cryptosporidium_hominis == 40 ~ 0, Cryptosporidium_hominis < 40 ~ 1, is.na(Cryptosporidium_hominis) ~ 0),
+         Cryptosporidium_parvum = case_when(Cryptosporidium_parvum == 40 ~ 0, Cryptosporidium_parvum < 40 ~ 1, is.na(Cryptosporidium_parvum) ~ 0),
+         Cyclospora = case_when(Cyclospora == 35 ~ 0, Cyclospora < 35 ~ 1, is.na(Cyclospora) ~ NA),
+         Entamoeba_histolytica = case_when(Entamoeba_histolytica == 35 ~ 0, Entamoeba_histolytica < 35 ~ 1, is.na(Entamoeba_histolytica) ~ NA),
+         Giardia = case_when(Giardia == 35 ~ 0, Giardia < 35 ~ 1, is.na(Giardia) ~ NA),
+         Trichuris = case_when(Trichuris == 35 ~ 0, Trichuris < 35 ~ 1, is.na(Trichuris) ~ NA))%>%
+  mutate("Adenovirus_combo"=if_else(Adenovirus+Adenovirus_40_41>=1,1,0),
+         "Cryptosporidium_combo"=if_else(Cryptosporidium+Cryptosporidium_hominis+Cryptosporidium_parvum>=1,1,0),
+         "Norovirus_combo"=if_else(Norovirus_GI+Norovirus_GII+Norovirus_GI_1+Norovirus_GII_4>=1,1,0),
+         "Campylobacter_combo"=if_else(Campylobacter+Campylobacter_jejuni_coli>=1,1,0),
+         "EAEC"=if_else(EAEC_aaiC+EAEC_aatA+EAEC_aggR>=1,1,0),
+         "tEPEC"=if_else(EPEC_bfpA+EPEC_eae==2,1,0),
+         "aEPEC"=if_else(EPEC_eae==1 & EPEC_bfpA==0,1,0),
+         "ETEC"=if_else(ETEC_LT+ETEC_STh+ETEC_STp>=1,1,0),
+         "EHEC"=if_else(EPEC_eae+STEC_stx1+STEC_stx2>1 & STEC_stx1+STEC_stx2!=2 | EPEC_eae+STEC_stx1+STEC_stx2>2, 1,0),
+         "STEC"=if_else(EPEC_eae==0 & STEC_stx1+STEC_stx2>=1, 1, 0))
+  
+maled_PA_complete_cases <- maled_PA[complete.cases(maled_PA),]%>%
+  select(-Adenovirus, -Adenovirus_40_41, -Cryptosporidium, -Cryptosporidium_hominis, -Cryptosporidium_parvum, -Norovirus_GI, -Norovirus_GI_1, -Norovirus_GII, -Norovirus_GII_4, -Campylobacter, -Campylobacter_jejuni_coli, -EAEC_aaiC, -EAEC_aatA, -EAEC_aggR, -EPEC_bfpA, -EPEC_eae, -ETEC_LT, -ETEC_STh, -ETEC_STp, -STEC_stx1, -STEC_stx2)%>%
+  
+  mutate(Number_of_pathogens=rowSums(across(c(EAEC, STEC, aEPEC, tEPEC, EHEC, ETEC, EIEC_or_Shigella, Campylobacter_combo, Salmonella, Adenovirus_combo, Astrovirus, Norovirus_combo, Rotavirus, Sapovirus, Ascaris, Cryptosporidium_combo, Cyclospora, Entamoeba_histolytica, Giardia, Trichuris))),
+         Number_of_bacterial_pathogens=rowSums(across(c(EAEC, STEC, aEPEC, tEPEC, EHEC, ETEC, EIEC_or_Shigella, Campylobacter_combo, Salmonella))),
+         Number_of_viral_pathogens=rowSums(across(c(Adenovirus_combo, Astrovirus, Norovirus_combo, Rotavirus, Sapovirus))),
+         Number_of_parasite_pathogens=rowSums(across(c(Ascaris, Cryptosporidium_combo, Cyclospora, Entamoeba_histolytica, Giardia, Trichuris))),
+         anypathogen = if_else(Number_of_pathogens > 0, 1, 0),
+         anybacteria = if_else(Number_of_bacterial_pathogens > 0, 1, 0),
+         anyvirus = if_else(Number_of_viral_pathogens > 0, 1, 0),
+         anyparasite = if_else(Number_of_parasite_pathogens > 0, 1, 0),
+         Any_co_infection = case_when(Number_of_pathogens > 1 ~ 1, TRUE ~ 0))
+
+maled_prev <- maled_PA_complete_cases%>%
+  group_by(Country, Urbanicity)%>%
+  dplyr::summarize(Total_run=n(), 
+            Pos_EAEC=sum(EAEC),
+            Pos_STEC =sum(STEC),
+            Pos_aEPEC =sum(aEPEC),
+            Pos_tEPEC =sum(tEPEC),
+            Pos_EHEC =sum(EHEC),
+            Pos_ETEC =sum(ETEC),
+            Pos_EIEC_or_Shigella =sum(EIEC_or_Shigella),
+            Pos_Campylobacter_combo =sum(Campylobacter_combo),
+            Pos_Salmonella =sum(Salmonella),
+            Pos_Adenovirus_combo =sum(Adenovirus_combo),
+            Pos_Astrovirus =sum(Astrovirus),
+            Pos_Norovirus_combo =sum(Norovirus_combo),
+            Pos_Rotavirus =sum(Rotavirus),
+            Pos_Sapovirus =sum(Sapovirus),
+            Pos_Ascaris =sum(Ascaris),
+            Pos_Cryptosporidium_combo =sum(Cryptosporidium_combo),
+            Pos_Cyclospora =sum(Cyclospora),
+            Pos_Entamoeba_histolytica =sum(Entamoeba_histolytica),
+            Pos_Giardia =sum(Giardia),
+            Pos_Trichuris =sum(Trichuris),
+            Pos_anypathogen =sum(anypathogen),
+            Pos_anybacteria =sum(anybacteria),
+            Pos_anyvirus =sum(anyvirus),
+            Pos_anyparasite =sum(anyparasite),
+            Pos_Any_co_infection =sum(Any_co_infection))
+
+maled_prev$Perc_Pos_EAEC <-((maled_prev$Pos_EAEC/maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_STEC <-((maled_prev$Pos_STEC /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_aEPEC <-((maled_prev$Pos_aEPEC /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_tEPEC <-((maled_prev$Pos_tEPEC /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_EHEC <-((maled_prev$Pos_EHEC /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_EIEC_or_Shigella <-((maled_prev$Pos_EIEC_or_Shigella /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Campylobacter_combo <-((maled_prev$Pos_Campylobacter_combo /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Salmonella <-((maled_prev$Pos_Salmonella /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Adenovirus_combo <-((maled_prev$Pos_Adenovirus_combo /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Astrovirus <-((maled_prev$Pos_Astrovirus /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Norovirus_combo <-((maled_prev$Pos_Norovirus_combo /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Rotavirus <-((maled_prev$Pos_Rotavirus /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Sapovirus <-((maled_prev$Pos_Sapovirus /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Ascaris <-((maled_prev$Pos_Ascaris /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Cryptosporidium_combo <-((maled_prev$Pos_Cryptosporidium_combo /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Cyclospora <-((maled_prev$Pos_Cyclospora /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Entamoeba_histolytica <-((maled_prev$Pos_Entamoeba_histolytica /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Giardia <-((maled_prev$Pos_Giardia /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Trichuris <-((maled_prev$Pos_Trichuris /maled_prev$Total_run)*100)
+
+maled_prev$Perc_Pos_anypathogen <-((maled_prev$Pos_anypathogen /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_anybacteria <-((maled_prev$Pos_anybacteria /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_anyvirus <-((maled_prev$Pos_anyvirus /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_anyparasite <-((maled_prev$Pos_anyparasite /maled_prev$Total_run)*100)
+maled_prev$Perc_Pos_Any_co_infection <-((maled_prev$Pos_Any_co_infection /maled_prev$Total_run)*100)
+
+#all
+maled_prev_all <- maled_PA_complete_cases%>%
+  #group_by(Country, Urbanicity)%>%
+  dplyr::summarize(Total_run=n(), 
+            Pos_EAEC=sum(EAEC),
+            Pos_STEC =sum(STEC),
+            Pos_aEPEC =sum(aEPEC),
+            Pos_tEPEC =sum(tEPEC),
+            Pos_EHEC =sum(EHEC),
+            Pos_ETEC =sum(ETEC),
+            Pos_EIEC_or_Shigella =sum(EIEC_or_Shigella),
+            Pos_Campylobacter_combo =sum(Campylobacter_combo),
+            Pos_Salmonella =sum(Salmonella),
+            Pos_Adenovirus_combo =sum(Adenovirus_combo),
+            Pos_Astrovirus =sum(Astrovirus),
+            Pos_Norovirus_combo =sum(Norovirus_combo),
+            Pos_Rotavirus =sum(Rotavirus),
+            Pos_Sapovirus =sum(Sapovirus),
+            Pos_Ascaris =sum(Ascaris),
+            Pos_Cryptosporidium_combo =sum(Cryptosporidium_combo),
+            Pos_Cyclospora =sum(Cyclospora),
+            Pos_Entamoeba_histolytica =sum(Entamoeba_histolytica),
+            Pos_Giardia =sum(Giardia),
+            Pos_Trichuris =sum(Trichuris),
+            Pos_anypathogen =sum(anypathogen),
+            Pos_anybacteria =sum(anybacteria),
+            Pos_anyvirus =sum(anyvirus),
+            Pos_anyparasite =sum(anyparasite),
+            Pos_Any_co_infection =sum(Any_co_infection))
+
+maled_prev_all$Perc_Pos_EAEC <-((maled_prev_all$Pos_EAEC/maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_STEC <-((maled_prev_all$Pos_STEC /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_aEPEC <-((maled_prev_all$Pos_aEPEC /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_tEPEC <-((maled_prev_all$Pos_tEPEC /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_EHEC <-((maled_prev_all$Pos_EHEC /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_ETEC <-((maled_prev_all$Pos_ETEC /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_EIEC_or_Shigella <-((maled_prev_all$Pos_EIEC_or_Shigella /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Campylobacter_combo <-((maled_prev_all$Pos_Campylobacter_combo /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Salmonella <-((maled_prev_all$Pos_Salmonella /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Adenovirus_combo <-((maled_prev_all$Pos_Adenovirus_combo /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Astrovirus <-((maled_prev_all$Pos_Astrovirus /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Norovirus_combo <-((maled_prev_all$Pos_Norovirus_combo /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Rotavirus <-((maled_prev_all$Pos_Rotavirus /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Sapovirus <-((maled_prev_all$Pos_Sapovirus /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Ascaris <-((maled_prev_all$Pos_Ascaris /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Cryptosporidium_combo <-((maled_prev_all$Pos_Cryptosporidium_combo /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Cyclospora <-((maled_prev_all$Pos_Cyclospora /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Entamoeba_histolytica <-((maled_prev_all$Pos_Entamoeba_histolytica /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Giardia <-((maled_prev_all$Pos_Giardia /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_Trichuris <-((maled_prev_all$Pos_Trichuris /maled_prev_all$Total_run)*100)
+
+#maled_prev_all$Perc_Pos_anypathogen <-((maled_prev_all$Pos_anypathogen /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_anybacteria <-((maled_prev_all$Pos_anybacteria /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_anyvirus <-((maled_prev_all$Pos_anyvirus /maled_prev_all$Total_run)*100)
+maled_prev_all$Perc_Pos_anyparasite <-((maled_prev_all$Pos_anyparasite /maled_prev_all$Total_run)*100)
+#maled_prev_all$Perc_Pos_Any_co_infection <-((maled_prev_all$Pos_Any_co_infection /maled_prev_all$Total_run)*100)
+
+maled_prev_all2 <- pivot_longer(maled_prev_all, cols=starts_with("Perc"), names_to="Pathogen", values_to = "Percent_pos")%>%
+  select(Pathogen, Percent_pos)%>%
+  mutate(Pathogen=case_when(Pathogen=="Perc_Pos_aEPEC" ~ "aEPEC",
+                            Pathogen=="Perc_Pos_Campylobacter_combo" ~ "Campylobacter",
+                            Pathogen=="Perc_Pos_EAEC" ~ "EAEC",
+                            Pathogen=="Perc_Pos_EHEC" ~ "EHEC",
+                            Pathogen=="Perc_Pos_EIEC_or_Shigella" ~ "EIEC and/or Shigella",
+                            Pathogen=="Perc_Pos_ETEC" ~ "ETEC",
+                            Pathogen=="Perc_Pos_Salmonella" ~ "Salmonella",
+                            Pathogen=="Perc_Pos_STEC" ~ "STEC",
+                            Pathogen=="Perc_Pos_tEPEC" ~ "tEPEC",
+                            Pathogen=="Perc_Pos_Adenovirus_combo" ~ "Adenovirus",
+                            Pathogen=="Perc_Pos_Astrovirus" ~ "Astrovirus",
+                            Pathogen=="Perc_Pos_Norovirus_combo" ~ "Norovirus",
+                            Pathogen=="Perc_Pos_Rotavirus" ~ "Rotavirus",
+                            Pathogen=="Perc_Pos_Sapovirus" ~ "Sapovirus",
+                            Pathogen=="Perc_Pos_Ascaris" ~ "Ascaris",
+                            Pathogen=="Perc_Pos_Cryptosporidium_combo" ~ "Cryptosporidium",
+                            Pathogen=="Perc_Pos_Cyclospora" ~ "Cyclospora cayetanesis",
+                            Pathogen=="Perc_Pos_Entamoeba_histolytica" ~ "Entamoeba",
+                            Pathogen=="Perc_Pos_Giardia" ~ "Giardia",
+                            Pathogen=="Perc_Pos_Trichuris" ~ "Trichuris",
+                            Pathogen=="Perc_Pos_anybacteria" ~ "Any bacteria",
+                            Pathogen=="Perc_Pos_anyvirus" ~ "Any virus",
+                            Pathogen=="Perc_Pos_anyparasite" ~ "Any parasite",
+                            TRUE ~ "Unknown"))%>%
+  mutate(Community.Type = "All MAL-ED")%>%
+  mutate(pathogen_type=case_when(Pathogen=="aEPEC" ~ "Bacteria",
+                            Pathogen=="Campylobacter" ~ "Bacteria",
+                            Pathogen=="EAEC" ~ "Bacteria",
+                            Pathogen=="EHEC" ~ "Bacteria",
+                            Pathogen=="EIEC and/or Shigella" ~ "Bacteria",
+                            Pathogen=="ETEC" ~ "Bacteria",
+                            Pathogen=="Salmonella" ~ "Bacteria",
+                            Pathogen=="STEC" ~ "Bacteria",
+                            Pathogen=="tEPEC" ~ "Bacteria",
+                            Pathogen=="Adenovirus" ~ "Virus",
+                            Pathogen=="Astrovirus" ~ "Virus",
+                            Pathogen=="Norovirus" ~ "Virus",
+                            Pathogen=="Rotavirus" ~ "Virus",
+                            Pathogen=="Sapovirus" ~ "Virus",
+                            Pathogen=="Ascaris" ~ "Parasite",
+                            Pathogen=="Cryptosporidium" ~ "Parasite",
+                            Pathogen=="Cyclospora cayetanesis" ~ "Parasite",
+                            Pathogen=="Entamoeba" ~ "Parasite",
+                            Pathogen=="Giardia" ~ "Parasite",
+                            Pathogen=="Trichuris" ~ "Parasite",
+                            Pathogen=="Any bacteria" ~ "Bacteria",
+                            Pathogen=="Any virus" ~ "Virus",
+                            Pathogen=="Any parasite" ~ "Parasite",
+                            TRUE ~ "Unknown"))
+
+#urban
+maled_prev_urbanicity <- maled_PA_complete_cases%>%
+  group_by(Urbanicity)%>%
+  dplyr::summarize(Total_run=n(), 
+            Pos_EAEC=sum(EAEC),
+            Pos_STEC =sum(STEC),
+            Pos_aEPEC =sum(aEPEC),
+            Pos_tEPEC =sum(tEPEC),
+            Pos_EHEC =sum(EHEC),
+            Pos_ETEC =sum(ETEC),
+            Pos_EIEC_or_Shigella =sum(EIEC_or_Shigella),
+            Pos_Campylobacter_combo =sum(Campylobacter_combo),
+            Pos_Salmonella =sum(Salmonella),
+            Pos_Adenovirus_combo =sum(Adenovirus_combo),
+            Pos_Astrovirus =sum(Astrovirus),
+            Pos_Norovirus_combo =sum(Norovirus_combo),
+            Pos_Rotavirus =sum(Rotavirus),
+            Pos_Sapovirus =sum(Sapovirus),
+            Pos_Ascaris =sum(Ascaris),
+            Pos_Cryptosporidium_combo =sum(Cryptosporidium_combo),
+            Pos_Cyclospora =sum(Cyclospora),
+            Pos_Entamoeba_histolytica =sum(Entamoeba_histolytica),
+            Pos_Giardia =sum(Giardia),
+            Pos_Trichuris =sum(Trichuris),
+            Pos_anypathogen =sum(anypathogen),
+            Pos_anybacteria =sum(anybacteria),
+            Pos_anyvirus =sum(anyvirus),
+            Pos_anyparasite =sum(anyparasite),
+            Pos_Any_co_infection =sum(Any_co_infection))
+
+maled_prev_urbanicity$Perc_Pos_EAEC <-((maled_prev_urbanicity$Pos_EAEC/maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_STEC <-((maled_prev_urbanicity$Pos_STEC /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_aEPEC <-((maled_prev_urbanicity$Pos_aEPEC /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_tEPEC <-((maled_prev_urbanicity$Pos_tEPEC /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_EHEC <-((maled_prev_urbanicity$Pos_EHEC /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_ETEC <-((maled_prev_urbanicity$Pos_ETEC /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_EIEC_or_Shigella <-((maled_prev_urbanicity$Pos_EIEC_or_Shigella /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Campylobacter_combo <-((maled_prev_urbanicity$Pos_Campylobacter_combo /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Salmonella <-((maled_prev_urbanicity$Pos_Salmonella /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Adenovirus_combo <-((maled_prev_urbanicity$Pos_Adenovirus_combo /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Astrovirus <-((maled_prev_urbanicity$Pos_Astrovirus /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Norovirus_combo <-((maled_prev_urbanicity$Pos_Norovirus_combo /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Rotavirus <-((maled_prev_urbanicity$Pos_Rotavirus /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Sapovirus <-((maled_prev_urbanicity$Pos_Sapovirus /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Ascaris <-((maled_prev_urbanicity$Pos_Ascaris /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Cryptosporidium_combo <-((maled_prev_urbanicity$Pos_Cryptosporidium_combo /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Cyclospora <-((maled_prev_urbanicity$Pos_Cyclospora /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Entamoeba_histolytica <-((maled_prev_urbanicity$Pos_Entamoeba_histolytica /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Giardia <-((maled_prev_urbanicity$Pos_Giardia /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_Trichuris <-((maled_prev_urbanicity$Pos_Trichuris /maled_prev_urbanicity$Total_run)*100)
+
+#maled_prev_urbanicity$Perc_Pos_anypathogen <-((maled_prev_urbanicity$Pos_anypathogen /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_anybacteria <-((maled_prev_urbanicity$Pos_anybacteria /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_anyvirus <-((maled_prev_urbanicity$Pos_anyvirus /maled_prev_urbanicity$Total_run)*100)
+maled_prev_urbanicity$Perc_Pos_anyparasite <-((maled_prev_urbanicity$Pos_anyparasite /maled_prev_urbanicity$Total_run)*100)
+#maled_prev_urbanicity$Perc_Pos_Any_co_infection <-((maled_prev_urbanicity$Pos_Any_co_infection /maled_prev_urbanicity$Total_run)*100)
+
+maled_prev_urbanicity2 <- pivot_longer(maled_prev_urbanicity, cols=starts_with("Perc"), names_to="Pathogen", values_to = "Percent_pos")%>%
+  select(Urbanicity, Pathogen, Percent_pos)%>%
+  mutate(Pathogen=case_when(Pathogen=="Perc_Pos_aEPEC" ~ "aEPEC",
+                            Pathogen=="Perc_Pos_Campylobacter_combo" ~ "Campylobacter",
+                            Pathogen=="Perc_Pos_EAEC" ~ "EAEC",
+                            Pathogen=="Perc_Pos_EHEC" ~ "EHEC",
+                            Pathogen=="Perc_Pos_EIEC_or_Shigella" ~ "EIEC and/or Shigella",
+                            Pathogen=="Perc_Pos_ETEC" ~ "ETEC",
+                            Pathogen=="Perc_Pos_Salmonella" ~ "Salmonella",
+                            Pathogen=="Perc_Pos_STEC" ~ "STEC",
+                            Pathogen=="Perc_Pos_tEPEC" ~ "tEPEC",
+                            Pathogen=="Perc_Pos_Adenovirus_combo" ~ "Adenovirus",
+                            Pathogen=="Perc_Pos_Astrovirus" ~ "Astrovirus",
+                            Pathogen=="Perc_Pos_Norovirus_combo" ~ "Norovirus",
+                            Pathogen=="Perc_Pos_Rotavirus" ~ "Rotavirus",
+                            Pathogen=="Perc_Pos_Sapovirus" ~ "Sapovirus",
+                            Pathogen=="Perc_Pos_Ascaris" ~ "Ascaris",
+                            Pathogen=="Perc_Pos_Cryptosporidium_combo" ~ "Cryptosporidium",
+                            Pathogen=="Perc_Pos_Cyclospora" ~ "Cyclospora cayetanesis",
+                            Pathogen=="Perc_Pos_Entamoeba_histolytica" ~ "Entamoeba",
+                            Pathogen=="Perc_Pos_Giardia" ~ "Giardia",
+                            Pathogen=="Perc_Pos_Trichuris" ~ "Trichuris",
+                            Pathogen=="Perc_Pos_anybacteria" ~ "Any bacteria",
+                            Pathogen=="Perc_Pos_anyvirus" ~ "Any virus",
+                            Pathogen=="Perc_Pos_anyparasite" ~ "Any parasite",
+                            TRUE ~ "Unknown"))%>%
+  mutate(Community.Type = case_when(Urbanicity=="Rural"~ "MAL-ED rural",
+                                    Urbanicity=="Urban"~ "MAL-ED urban",
+                                    TRUE ~ "Unknown"))%>%
+  mutate(pathogen_type=case_when(Pathogen=="aEPEC" ~ "Bacteria",
+                            Pathogen=="Campylobacter" ~ "Bacteria",
+                            Pathogen=="EAEC" ~ "Bacteria",
+                            Pathogen=="EHEC" ~ "Bacteria",
+                            Pathogen=="EIEC and/or Shigella" ~ "Bacteria",
+                            Pathogen=="ETEC" ~ "Bacteria",
+                            Pathogen=="Salmonella" ~ "Bacteria",
+                            Pathogen=="STEC" ~ "Bacteria",
+                            Pathogen=="tEPEC" ~ "Bacteria",
+                            Pathogen=="Adenovirus" ~ "Virus",
+                            Pathogen=="Astrovirus" ~ "Virus",
+                            Pathogen=="Norovirus" ~ "Virus",
+                            Pathogen=="Rotavirus" ~ "Virus",
+                            Pathogen=="Sapovirus" ~ "Virus",
+                            Pathogen=="Ascaris" ~ "Parasite",
+                            Pathogen=="Cryptosporidium" ~ "Parasite",
+                            Pathogen=="Cyclospora cayetanesis" ~ "Parasite",
+                            Pathogen=="Entamoeba" ~ "Parasite",
+                            Pathogen=="Giardia" ~ "Parasite",
+                            Pathogen=="Trichuris" ~ "Parasite",
+                            Pathogen=="Any bacteria" ~ "Bacteria",
+                            Pathogen=="Any virus" ~ "Virus",
+                            Pathogen=="Any parasite" ~ "Parasite",
+                            TRUE ~ "Unknown"))%>%
+  select(-Urbanicity)
+
+
+#
+maled_prev2 <- pivot_longer(maled_prev, cols=starts_with("Perc"), names_to="Pathogen", values_to = "Percent_pos")%>%
+  select(Country, Urbanicity, Total_run, Pathogen, Percent_pos)
+
+#write.csv(maled_PA_complete_cases, file="Export_files/MALEDdata.csv")
+#write.csv(maled_prev2, file="Export_files/MALEDdata_summary.csv")
+```
+
+#Figure 3 and Figure S4 (no post-processing)
+```{r}
+#format data
+TAC_prev_stats_pathogen <- TAC_pathogens%>%
+  dplyr::summarize(Total_run=n(), Pos_Ascaris=sum(Ascaris), Pos_Astrovirus=sum(Astrovirus), Pos_Cyclospora_cayetanesis=sum(Cyclospora_cayetanesis), Pos_Entamoeba=sum(Entamoeba), Pos_Enterovirus=sum(Enterovirus), Pos_Giardia_18S=sum(Giardia_18S), Pos_Rotavirus=sum(Rotavirus), Pos_Sapovirus=sum(Sapovirus), Pos_Trichuris=sum(Trichuris), Pos_Adenovirus=sum(Adenovirus), Pos_Cryptosporidium=sum(Cryptosporidium), Pos_Norovirus=sum(Norovirus), Pos_Salmonella=sum(Salmonella), Pos_Campylobacter=sum(Campylobacter), Pos_SARS_CoV_2=sum(SARS_CoV_2), Pos_EAEC=sum(EAEC), Pos_DAEC=sum(DAEC), Pos_tEPEC=sum(tEPEC), Pos_aEPEC=sum(aEPEC), Pos_ETEC=sum(ETEC), Pos_EIEC_or_Shigella=sum(EIEC_or_Shigella), Pos_EHEC=sum(EHEC), Pos_STEC=sum(STEC), 
+                   Pos_bacteria=sum(anybacteria),
+                   Pos_virus=sum(Any_virus_noCOVID),
+                   Pos_parasite=sum(anyparasite))
+
+TAC_prev_stats_pathogen$Perc_pos_Ascaris<-((TAC_prev_stats_pathogen$Pos_Ascaris/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Astrovirus<-((TAC_prev_stats_pathogen$Pos_Astrovirus/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Cyclospora_cayetanesis<-((TAC_prev_stats_pathogen$Pos_Cyclospora_cayetanesis/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Entamoeba<-((TAC_prev_stats_pathogen$Pos_Entamoeba/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Enterovirus<-((TAC_prev_stats_pathogen$Pos_Enterovirus/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Giardia_18S<-((TAC_prev_stats_pathogen$Pos_Giardia_18S/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Rotavirus<-((TAC_prev_stats_pathogen$Pos_Rotavirus/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Sapovirus<-((TAC_prev_stats_pathogen$Pos_Sapovirus/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Trichuris<-((TAC_prev_stats_pathogen$Pos_Trichuris/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Adenovirus<-((TAC_prev_stats_pathogen$Pos_Adenovirus/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Cryptosporidium<-((TAC_prev_stats_pathogen$Pos_Cryptosporidium/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Norovirus<-((TAC_prev_stats_pathogen$Pos_Norovirus/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Salmonella<-((TAC_prev_stats_pathogen$Pos_Salmonella/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_Campylobacter<-((TAC_prev_stats_pathogen$Pos_Campylobacter/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_SARS_CoV_2<-((TAC_prev_stats_pathogen$Pos_SARS_CoV_2/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_EAEC<-((TAC_prev_stats_pathogen$Pos_EAEC/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_DAEC<-((TAC_prev_stats_pathogen$Pos_DAEC/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_tEPEC<-((TAC_prev_stats_pathogen$Pos_tEPEC/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_aEPEC<-((TAC_prev_stats_pathogen$Pos_aEPEC/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_ETEC<-((TAC_prev_stats_pathogen$Pos_ETEC/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_EIEC_or_Shigella<-((TAC_prev_stats_pathogen$Pos_EIEC_or_Shigella/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_EHEC<-((TAC_prev_stats_pathogen$Pos_EHEC/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_STEC<-((TAC_prev_stats_pathogen$Pos_STEC/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_bacteria<-((TAC_prev_stats_pathogen$Pos_bacteria/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_virus<-((TAC_prev_stats_pathogen$Pos_virus/TAC_prev_stats_pathogen$Total_run)*100)
+TAC_prev_stats_pathogen$Perc_pos_parasite<-((TAC_prev_stats_pathogen$Pos_parasite/TAC_prev_stats_pathogen$Total_run)*100)
+
+TAC_prev_stats_pathogen2 <- pivot_longer(TAC_prev_stats_pathogen, cols=starts_with("Perc"), names_to="Pathogen", values_to = "Percent_pos")%>%
+  mutate(pathogen_type = if_else(Pathogen == "Perc_pos_Ascaris", "Parasite", if_else(Pathogen == "Perc_pos_Astrovirus", "Virus", if_else(Pathogen == "Perc_pos_Cyclospora_cayetanesis", "Parasite", if_else(Pathogen == "Perc_pos_Entamoeba", "Parasite", if_else(Pathogen == "Perc_pos_Enterovirus", "Virus", if_else(Pathogen == "Perc_pos_Giardia_18S", "Parasite", if_else(Pathogen == "Perc_pos_Rotavirus", "Virus", if_else(Pathogen == "Perc_pos_Sapovirus", "Virus", if_else(Pathogen == "Perc_pos_Trichuris", "Parasite", if_else(Pathogen == "Perc_pos_Adenovirus", "Virus", if_else(Pathogen == "Perc_pos_Cryptosporidium", "Parasite", if_else(Pathogen == "Perc_pos_Norovirus", "Virus", if_else(Pathogen == "Perc_pos_Salmonella", "Bacteria", if_else(Pathogen == "Perc_pos_Campylobacter", "Bacteria", if_else(Pathogen == "Perc_pos_SARS_CoV_2", "Virus", if_else(Pathogen == "Perc_pos_EAEC", "Bacteria", if_else(Pathogen == "Perc_pos_DAEC", "Bacteria", if_else(Pathogen == "Perc_pos_tEPEC", "Bacteria", if_else(Pathogen == "Perc_pos_aEPEC", "Bacteria", if_else(Pathogen == "Perc_pos_ETEC", "Bacteria", if_else(Pathogen == "Perc_pos_EIEC_or_Shigella", "Bacteria", if_else(Pathogen == "Perc_pos_EHEC", "Bacteria", if_else(Pathogen == "Perc_pos_STEC", "Bacteria", if_else(Pathogen == "Perc_pos_bacteria", "Bacteria", if_else(Pathogen == "Perc_pos_virus", "Virus", if_else(Pathogen == "Perc_pos_parasite", "Parasite", "NA")))))))))))))))))))))))))))
+
+TAC_prev_stats_pathogen3 <- TAC_prev_stats_pathogen2%>%
+  select(Pathogen, Percent_pos, pathogen_type)%>%
+  mutate(Pathogen=case_when(Pathogen=="Perc_pos_aEPEC" ~ "aEPEC",
+                            Pathogen=="Perc_pos_Campylobacter" ~ "Campylobacter",
+                            Pathogen=="Perc_pos_DAEC" ~ "DAEC",
+                            Pathogen=="Perc_pos_EAEC" ~ "EAEC",
+                            Pathogen=="Perc_pos_EHEC" ~ "EHEC",
+                            Pathogen=="Perc_pos_EIEC_or_Shigella" ~ "EIEC and/or Shigella",
+                            Pathogen=="Perc_pos_ETEC" ~ "ETEC",
+                            Pathogen=="Perc_pos_Salmonella" ~ "Salmonella",
+                            Pathogen=="Perc_pos_STEC" ~ "STEC",
+                            Pathogen=="Perc_pos_tEPEC" ~ "tEPEC",
+                            Pathogen=="Perc_pos_Adenovirus" ~ "Adenovirus",
+                            Pathogen=="Perc_pos_Astrovirus" ~ "Astrovirus",
+                            Pathogen=="Perc_pos_Enterovirus" ~ "Enterovirus",
+                            Pathogen=="Perc_pos_Norovirus" ~ "Norovirus",
+                            Pathogen=="Perc_pos_Rotavirus" ~ "Rotavirus",
+                            Pathogen=="Perc_pos_Sapovirus" ~ "Sapovirus",
+                            Pathogen=="Perc_pos_SARS_CoV_2" ~ "SARS-CoV-2",
+                            Pathogen=="Perc_pos_Ascaris" ~ "Ascaris",
+                            Pathogen=="Perc_pos_Cryptosporidium" ~ "Cryptosporidium",
+                            Pathogen=="Perc_pos_Cyclospora_cayetanesis" ~ "Cyclospora cayetanesis",
+                            Pathogen=="Perc_pos_Entamoeba" ~ "Entamoeba",
+                            Pathogen=="Perc_pos_Giardia_18S" ~ "Giardia",
+                            Pathogen=="Perc_pos_Trichuris" ~ "Trichuris",
+                            Pathogen=="Perc_pos_bacteria" ~ "Any bacteria",
+                            Pathogen=="Perc_pos_virus" ~ "Any virus",
+                            Pathogen=="Perc_pos_parasite" ~ "Any parasite",
+                            TRUE ~ "Unknown"))%>%
+  mutate(Pathogen= factor(Pathogen, levels = c("Any bacteria","EAEC", "DAEC", "aEPEC", "tEPEC", "EHEC", "ETEC", "STEC", "EIEC and/or Shigella", "Campylobacter", "Salmonella", "Any virus", "Adenovirus","Astrovirus","Enterovirus","Norovirus","Rotavirus","Sapovirus","SARS-CoV-2", "Any parasite", "Ascaris","Cryptosporidium","Cyclospora cayetanesis","Entamoeba","Giardia","Trichuris"), ordered = TRUE))%>%
+  mutate(Community.Type = "All Communities")
+
+#Community type
+TAC_prev_stats_community.type_pathogen <- TAC_pathogens%>%
+  group_by(Community.Type)%>%
+  dplyr::summarize(Total_run=n(), Pos_Ascaris=sum(Ascaris), Pos_Astrovirus=sum(Astrovirus), Pos_Cyclospora_cayetanesis=sum(Cyclospora_cayetanesis), Pos_Entamoeba=sum(Entamoeba), Pos_Enterovirus=sum(Enterovirus), Pos_Giardia_18S=sum(Giardia_18S), Pos_Rotavirus=sum(Rotavirus), Pos_Sapovirus=sum(Sapovirus), Pos_Trichuris=sum(Trichuris), Pos_Adenovirus=sum(Adenovirus), Pos_Cryptosporidium=sum(Cryptosporidium), Pos_Norovirus=sum(Norovirus), Pos_Salmonella=sum(Salmonella), Pos_Campylobacter=sum(Campylobacter), Pos_SARS_CoV_2=sum(SARS_CoV_2), Pos_EAEC=sum(EAEC), Pos_DAEC=sum(DAEC), Pos_tEPEC=sum(tEPEC), Pos_aEPEC=sum(aEPEC), Pos_ETEC=sum(ETEC), Pos_EIEC_or_Shigella=sum(EIEC_or_Shigella), Pos_EHEC=sum(EHEC), Pos_STEC=sum(STEC), 
+                   Pos_bacteria=sum(anybacteria),
+                   Pos_virus=sum(Any_virus_noCOVID),
+                   Pos_parasite=sum(anyparasite))
+
+TAC_prev_stats_community.type_pathogen$Perc_pos_Ascaris<-((TAC_prev_stats_community.type_pathogen$Pos_Ascaris/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Astrovirus<-((TAC_prev_stats_community.type_pathogen$Pos_Astrovirus/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Cyclospora_cayetanesis<-((TAC_prev_stats_community.type_pathogen$Pos_Cyclospora_cayetanesis/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Entamoeba<-((TAC_prev_stats_community.type_pathogen$Pos_Entamoeba/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Enterovirus<-((TAC_prev_stats_community.type_pathogen$Pos_Enterovirus/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Giardia_18S<-((TAC_prev_stats_community.type_pathogen$Pos_Giardia_18S/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Rotavirus<-((TAC_prev_stats_community.type_pathogen$Pos_Rotavirus/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Sapovirus<-((TAC_prev_stats_community.type_pathogen$Pos_Sapovirus/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Trichuris<-((TAC_prev_stats_community.type_pathogen$Pos_Trichuris/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Adenovirus<-((TAC_prev_stats_community.type_pathogen$Pos_Adenovirus/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Cryptosporidium<-((TAC_prev_stats_community.type_pathogen$Pos_Cryptosporidium/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Norovirus<-((TAC_prev_stats_community.type_pathogen$Pos_Norovirus/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Salmonella<-((TAC_prev_stats_community.type_pathogen$Pos_Salmonella/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_Campylobacter<-((TAC_prev_stats_community.type_pathogen$Pos_Campylobacter/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_SARS_CoV_2<-((TAC_prev_stats_community.type_pathogen$Pos_SARS_CoV_2/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_EAEC<-((TAC_prev_stats_community.type_pathogen$Pos_EAEC/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_DAEC<-((TAC_prev_stats_community.type_pathogen$Pos_DAEC/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_tEPEC<-((TAC_prev_stats_community.type_pathogen$Pos_tEPEC/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_aEPEC<-((TAC_prev_stats_community.type_pathogen$Pos_aEPEC/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_ETEC<-((TAC_prev_stats_community.type_pathogen$Pos_ETEC/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_EIEC_or_Shigella<-((TAC_prev_stats_community.type_pathogen$Pos_EIEC_or_Shigella/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_EHEC<-((TAC_prev_stats_community.type_pathogen$Pos_EHEC/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_STEC<-((TAC_prev_stats_community.type_pathogen$Pos_STEC/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+
+TAC_prev_stats_community.type_pathogen$Perc_pos_bacteria<-((TAC_prev_stats_community.type_pathogen$Pos_bacteria/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_virus<-((TAC_prev_stats_community.type_pathogen$Pos_virus/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+TAC_prev_stats_community.type_pathogen$Perc_pos_parasite<-((TAC_prev_stats_community.type_pathogen$Pos_parasite/TAC_prev_stats_community.type_pathogen$Total_run)*100)
+
+TAC_prev_stats_community.type_pathogen2 <- pivot_longer(TAC_prev_stats_community.type_pathogen, cols=starts_with("Perc"), names_to="Pathogen", values_to = "Percent_pos")%>%
+  mutate(pathogen_type = if_else(Pathogen == "Perc_pos_Ascaris", "Parasite", if_else(Pathogen == "Perc_pos_Astrovirus", "Virus", if_else(Pathogen == "Perc_pos_Cyclospora_cayetanesis", "Parasite", if_else(Pathogen == "Perc_pos_Entamoeba", "Parasite", if_else(Pathogen == "Perc_pos_Enterovirus", "Virus", if_else(Pathogen == "Perc_pos_Giardia_18S", "Parasite", if_else(Pathogen == "Perc_pos_Rotavirus", "Virus", if_else(Pathogen == "Perc_pos_Sapovirus", "Virus", if_else(Pathogen == "Perc_pos_Trichuris", "Parasite", if_else(Pathogen == "Perc_pos_Adenovirus", "Virus", if_else(Pathogen == "Perc_pos_Cryptosporidium", "Parasite", if_else(Pathogen == "Perc_pos_Norovirus", "Virus", if_else(Pathogen == "Perc_pos_Salmonella", "Bacteria", if_else(Pathogen == "Perc_pos_Campylobacter", "Bacteria", if_else(Pathogen == "Perc_pos_SARS_CoV_2", "Virus", if_else(Pathogen == "Perc_pos_EAEC", "Bacteria", if_else(Pathogen == "Perc_pos_DAEC", "Bacteria", if_else(Pathogen == "Perc_pos_tEPEC", "Bacteria", if_else(Pathogen == "Perc_pos_aEPEC", "Bacteria", if_else(Pathogen == "Perc_pos_ETEC", "Bacteria", if_else(Pathogen == "Perc_pos_EIEC_or_Shigella", "Bacteria", if_else(Pathogen == "Perc_pos_EHEC", "Bacteria", if_else(Pathogen == "Perc_pos_STEC", "Bacteria", if_else(Pathogen == "Perc_pos_bacteria", "Bacteria", if_else(Pathogen == "Perc_pos_virus", "Virus", if_else(Pathogen == "Perc_pos_parasite", "Parasite", "NA")))))))))))))))))))))))))))
+
+
+TAC_prev_stats_community.type_pathogen3 <- TAC_prev_stats_community.type_pathogen2%>%
+  select(Community.Type, Pathogen, Percent_pos, pathogen_type)%>%
+  mutate(Pathogen=case_when(Pathogen=="Perc_pos_aEPEC" ~ "aEPEC",
+                            Pathogen=="Perc_pos_Campylobacter" ~ "Campylobacter",
+                            Pathogen=="Perc_pos_DAEC" ~ "DAEC",
+                            Pathogen=="Perc_pos_EAEC" ~ "EAEC",
+                            Pathogen=="Perc_pos_EHEC" ~ "EHEC",
+                            Pathogen=="Perc_pos_EIEC_or_Shigella" ~ "EIEC and/or Shigella",
+                            Pathogen=="Perc_pos_ETEC" ~ "ETEC",
+                            Pathogen=="Perc_pos_Salmonella" ~ "Salmonella",
+                            Pathogen=="Perc_pos_STEC" ~ "STEC",
+                            Pathogen=="Perc_pos_tEPEC" ~ "tEPEC",
+                            Pathogen=="Perc_pos_Adenovirus" ~ "Adenovirus",
+                            Pathogen=="Perc_pos_Astrovirus" ~ "Astrovirus",
+                            Pathogen=="Perc_pos_Enterovirus" ~ "Enterovirus",
+                            Pathogen=="Perc_pos_Norovirus" ~ "Norovirus",
+                            Pathogen=="Perc_pos_Rotavirus" ~ "Rotavirus",
+                            Pathogen=="Perc_pos_Sapovirus" ~ "Sapovirus",
+                            Pathogen=="Perc_pos_SARS_CoV_2" ~ "SARS-CoV-2",
+                            Pathogen=="Perc_pos_Ascaris" ~ "Ascaris",
+                            Pathogen=="Perc_pos_Cryptosporidium" ~ "Cryptosporidium",
+                            Pathogen=="Perc_pos_Cyclospora_cayetanesis" ~ "Cyclospora cayetanesis",
+                            Pathogen=="Perc_pos_Entamoeba" ~ "Entamoeba",
+                            Pathogen=="Perc_pos_Giardia_18S" ~ "Giardia",
+                            Pathogen=="Perc_pos_Trichuris" ~ "Trichuris",
+                            Pathogen=="Perc_pos_bacteria" ~ "Any bacteria",
+                            Pathogen=="Perc_pos_virus" ~ "Any virus",
+                            Pathogen=="Perc_pos_parasite" ~ "Any parasite",
+                            TRUE ~ "Unknown"))%>%
+  mutate(Pathogen= factor(Pathogen, levels = c("Any bacteria","EAEC", "DAEC", "aEPEC", "tEPEC", "EHEC", "ETEC", "STEC", "EIEC and/or Shigella", "Campylobacter", "Salmonella", "Any virus", "Adenovirus","Astrovirus","Enterovirus","Norovirus","Rotavirus","Sapovirus","SARS-CoV-2", "Any parasite", "Ascaris","Cryptosporidium","Cyclospora cayetanesis","Entamoeba","Giardia","Trichuris"), ordered = TRUE))
+
+TAC_prev_stats_community.type_pathogen3 <- rbind(TAC_prev_stats_community.type_pathogen3, TAC_prev_stats_pathogen3)%>%
+  mutate(Community.Type = case_when(Community.Type == "urban" ~ "Urban",
+                                    Community.Type == "semi-urban" ~ "Intermediate",
+                                    Community.Type == "rural - road" ~ "Rural (road)",
+                                    Community.Type == "rural - river" ~ "Rural (river)",
+                                    TRUE ~ Community.Type))%>%
+  mutate(Community.Type= factor(Community.Type, levels = c("All Communities", "Urban", "Intermediate", "Rural (road)", "Rural (river)"), ordered = TRUE))
+
+TAC_prev_stats_community.type_bacteria<-TAC_prev_stats_community.type_pathogen3%>%
+  subset(pathogen_type=="Bacteria")
+
+TAC_prev_stats_community.type_virus<-TAC_prev_stats_community.type_pathogen3%>%
+  subset(pathogen_type=="Virus")%>%
+  subset(Pathogen != "SARS-CoV-2")
+
+TAC_prev_stats_community.type_parasite<-TAC_prev_stats_community.type_pathogen3%>%
+  subset(pathogen_type=="Parasite")
+
+TAC_6_PA_Community.type <- TAC_PA_subset%>%
+  mutate_at(c("Final.PA"), as.numeric)%>%
+  group_by(Target.Name, Community.type, Age, Organism, Target.Name.Organism, Type, Clean.Name)%>%
+  dplyr::summarize(Total_run=n(), 
+            Pos=sum(Final.PA))
+  
+TAC_6_PA_Community.type$Perc_pos<-((TAC_6_PA_Community.type$Pos/TAC_6_PA_Community.type$Total_run)*100)
+
+#graphs
+TAC_prev_stats_community.type_bacteria_bar<-TAC_prev_stats_community.type_bacteria%>%
+  mutate(title = "a) Bacteria") %>%
+    ggplot(aes(y=Percent_pos, x=reorder(Pathogen, -Percent_pos), fill=Community.Type))+
+      geom_bar(stat="Identity", position=position_dodge(0.7), width=0.5)+
+      scale_y_continuous(expand = expansion(mult = c(0, .1)))+
+      geom_vline(xintercept = seq(0.5, length(TAC_6_PA_Community.type$Perc_pos), by = 1), color="gray", linewidth=.5, alpha=.5)+
+      #viridis::scale_fill_viridis(discrete=T)+
+      scale_fill_manual(values = c("#440154", "#3F4A8A", "#26838F", "#6DCD59","#FDE725"))+
+      ylab("Prevalence (%)")+
+      facet_wrap(~title)+
+      theme(panel.grid.minor=element_blank(), panel.grid.major = element_blank(), 
+            strip.background = element_rect(fill = "white"),
+            strip.text = element_text(hjust = 0),
+            axis.text.x=element_text(angle=45, vjust=1, hjust=1, size=10, color="black"), 
+            axis.text.y = element_text(color="black", size=10),
+            axis.title.x=element_blank(),
+            axis.title.y = element_text(color="black", size=10),
+            plot.title = element_text(color="black", size=10, hjust=0.02))+
+      coord_cartesian(ylim=c(0,85))+theme(legend.title = element_blank(), legend.position = "right")+
+      scale_x_discrete(labels = function(x) str_wrap(x, width = 15))+
+  guides(color = guide_legend(title = "Community type"))
+
+TAC_prev_stats_community.type_virus_bar<-TAC_prev_stats_community.type_virus%>%
+  mutate(title = "b) Virus") %>%
+    ggplot(aes(y=Percent_pos, x=reorder(Pathogen, -Percent_pos), fill=Community.Type))+
+      geom_bar(stat="Identity", position=position_dodge(0.7), width=0.5)+
+      scale_y_continuous(expand = expansion(mult = c(0, .1)))+
+      geom_vline(xintercept = seq(0.5, length(TAC_6_PA_Community.type$Perc_pos), by = 1), color="gray", linewidth=.5, alpha=.5)+
+      #viridis::scale_fill_viridis(discrete=T)+
+      scale_fill_manual(values = c("#440154", "#3F4A8A", "#26838F", "#6DCD59","#FDE725"))+
+      ylab("Prevalence (%)")+
+      facet_wrap(~title) +
+      theme(panel.grid.minor=element_blank(), panel.grid.major = element_blank(),
+            strip.background = element_rect(fill = "white"),
+            strip.text = element_text(hjust = 0),
+            axis.text.x=element_text(angle=45, vjust=1, hjust=1, size=10, color="black"), 
+            axis.text.y = element_text(color="black", size=10),
+            axis.title.x=element_blank(),
+            axis.title.y = element_text(color="black", size=10),
+            plot.title = element_text(color="black", size=10, hjust=0.02))+
+      coord_cartesian(ylim=c(0,85))+theme(legend.position = "none")+
+      scale_x_discrete(labels = function(x) str_wrap(x, width = 10))
+
+TAC_prev_stats_community.type_parasite_bar<-TAC_prev_stats_community.type_parasite%>%
+  mutate(title = "c) Parasite") %>%
+    ggplot(aes(y=Percent_pos, x=reorder(Pathogen, -Percent_pos), fill=Community.Type))+
+      geom_bar(stat="Identity", position=position_dodge(0.7), width=0.5)+
+      scale_y_continuous(expand = expansion(mult = c(0, .1)))+
+      geom_vline(xintercept = seq(0.5, length(TAC_6_PA_Community.type$Perc_pos), by = 1), color="gray", linewidth=.5, alpha=.5)+
+      #viridis::scale_fill_viridis(discrete=T)+
+      scale_fill_manual(values = c("#440154", "#3F4A8A", "#26838F", "#6DCD59","#FDE725"))+
+      #ylab("Prevalence (%)")+
+      facet_wrap(~title) +
+      theme(panel.grid.minor=element_blank(), panel.grid.major = element_blank(), 
+            strip.background = element_rect(fill = "white"),
+            strip.text = element_text(hjust = 0),
+            axis.text.x=element_text(angle=45, vjust=1, hjust=1, size=10, color="black"), 
+            axis.text.y = element_text(color="black", size=10),
+            axis.title.x=element_blank(), 
+            axis.title.y=element_blank(),
+            plot.title = element_text(color="black", size=10, hjust=0.02))+
+      coord_cartesian(ylim=c(0,85))+theme(legend.position = "none")+
+      scale_x_discrete(labels = function(x) str_wrap(x, width = 10))
+
+bottom_row <- plot_grid(TAC_prev_stats_community.type_virus_bar, TAC_prev_stats_community.type_parasite_bar, align = "h")
+
+TAC_prev_stats_community.type_bar <- plot_grid(TAC_prev_stats_community.type_bacteria_bar, bottom_row, ncol = 1)
+
+TAC_prev_stats_community.type_bar
+
+#ggsave("Figures/prevalence_bar plot_bacteria.jpg", plot=TAC_prev_stats_community.type_bacteria_bar, height = 4, width = 6.5)
+#ggsave("Figures/prevalence_bar plot_virus.jpg", plot=TAC_prev_stats_community.type_virus_bar, height = 4, width = 3.25)
+#ggsave("Figures/prevalence_bar plot_parasite.jpg", plot=TAC_prev_stats_community.type_parasite_bar, height = 4, width = 3.25)
+
+ggsave("~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Figures/Figure 3 and S4/prevalence_bar plot_20240722.jpg", plot=TAC_prev_stats_community.type_bar, height = 6, width = 6.5)
+
+
+TAC_prev_stats_community.type_pathogen3_MALED <- rbind(TAC_prev_stats_community.type_pathogen3, TAC_prev_stats_pathogen3, maled_prev_all2, maled_prev_urbanicity2)%>%
+  mutate(Community.Type = case_when(Community.Type == "Urban" ~ "ECoMiD urban",
+                                    Community.Type == "Intermediate" ~ "ECoMiD intermediate",
+                                    Community.Type == "Rural (road)" ~ "ECoMiD rural (road)",
+                                    Community.Type == "Rural (river)" ~ "ECoMiD rural (river)",
+                                    Community.Type == "All Communities" ~ "All ECoMiD",
+                                    TRUE ~ Community.Type))%>%
+  mutate(Community.Type= factor(Community.Type, levels = c("All ECoMiD", "ECoMiD urban", "ECoMiD intermediate", "ECoMiD rural (road)", "ECoMiD rural (river)", "All MAL-ED", "MAL-ED urban", "MAL-ED rural"), ordered = TRUE))%>%
+  subset(Pathogen != "DAEC")%>%
+  subset(Pathogen != "Enterovirus")
+
+TAC_prev_stats_community.type_bacteria_MALED<-TAC_prev_stats_community.type_pathogen3_MALED%>%
+  subset(pathogen_type=="Bacteria")
+
+TAC_prev_stats_community.type_virus_MALED<-TAC_prev_stats_community.type_pathogen3_MALED%>%
+  subset(pathogen_type=="Virus")%>%
+  subset(Pathogen != "SARS-CoV-2")
+
+TAC_prev_stats_community.type_parasite_MALED<-TAC_prev_stats_community.type_pathogen3_MALED%>%
+  subset(pathogen_type=="Parasite")
+
+#graphs
+TAC_prev_stats_community.type_bacteria_bar_MALED<-TAC_prev_stats_community.type_bacteria_MALED%>%
+  mutate(title = "a) Bacteria") %>%
+    ggplot(aes(y=Percent_pos, x=reorder(Pathogen, -Percent_pos), fill=Community.Type))+
+      geom_bar(stat="Identity", position=position_dodge(0.7), width=0.5)+
+      scale_y_continuous(expand = expansion(mult = c(0, .1)))+
+      geom_vline(xintercept = seq(0.5, length(TAC_6_PA_Community.type$Perc_pos), by = 1), color="gray", linewidth=.5, alpha=.5)+
+      #viridis::scale_fill_viridis(discrete=T)+
+      scale_fill_manual(values = c("#440154", "#3F4A8A", "#26838F", "#6DCD59","#FDE725", "darkorange", "deeppink", "red3"))+
+      ylab("Prevalence (%)")+
+      facet_wrap(~title) +
+      theme(panel.grid.minor=element_blank(), panel.grid.major = element_blank(), 
+            strip.background = element_rect(fill = "white"),
+            strip.text = element_text(hjust = 0),
+            axis.text.x=element_text(angle=45, vjust=1, hjust=1, size=10, color="black"), 
+            axis.text.y = element_text(color="black", size=10),
+            axis.title.x=element_blank(), 
+            axis.title.y = element_text(color="black", size=10),
+            plot.title = element_text(color="black", size=10, hjust=0.02))+
+      coord_cartesian(ylim=c(0,85))+theme(legend.title = element_blank(), legend.position = "right")+
+      scale_x_discrete(labels = function(x) str_wrap(x, width = 15))
+
+TAC_prev_stats_community.type_virus_bar_MALED<-TAC_prev_stats_community.type_virus_MALED%>%
+  mutate(title = "b) Virus") %>%
+    ggplot(aes(y=Percent_pos, x=reorder(Pathogen, -Percent_pos), fill=Community.Type))+
+      geom_bar(stat="Identity", position=position_dodge(0.7), width=0.5)+
+      scale_y_continuous(expand = expansion(mult = c(0, .1)))+
+      geom_vline(xintercept = seq(0.5, length(TAC_6_PA_Community.type$Perc_pos), by = 1), color="gray", linewidth=.5, alpha=.5)+
+      #viridis::scale_fill_viridis(discrete=T)+
+      scale_fill_manual(values = c("#440154", "#3F4A8A", "#26838F", "#6DCD59","#FDE725", "darkorange", "deeppink", "red3"))+
+      ylab("Prevalence (%)")+
+      facet_wrap(~title) +
+      theme(panel.grid.minor=element_blank(), panel.grid.major = element_blank(), 
+            strip.background = element_rect(fill = "white"),
+            strip.text = element_text(hjust = 0),
+            axis.text.x=element_text(angle=45, vjust=1, hjust=1, size=10, color="black"), 
+            axis.text.y = element_text(color="black", size=10),
+            axis.title.x=element_blank(), 
+            axis.title.y = element_text(color="black", size=10),
+            plot.title = element_text(color="black", size=10, hjust=0.02))+
+      coord_cartesian(ylim=c(0,85))+theme(legend.position = "none")+
+      scale_x_discrete(labels = function(x) str_wrap(x, width = 10))
+
+TAC_prev_stats_community.type_parasite_bar_MALED<-TAC_prev_stats_community.type_parasite_MALED%>%
+  mutate(title = "c) Parasite") %>%
+    ggplot(aes(y=Percent_pos, x=reorder(Pathogen, -Percent_pos), fill=Community.Type))+
+      geom_bar(stat="Identity", position=position_dodge(0.7), width=0.5)+
+      scale_y_continuous(expand = expansion(mult = c(0, .1)))+
+      geom_vline(xintercept = seq(0.5, length(TAC_6_PA_Community.type$Perc_pos), by = 1), color="gray", linewidth=.5, alpha=.5)+
+      #viridis::scale_fill_viridis(discrete=T)+
+      scale_fill_manual(values = c("#440154", "#3F4A8A", "#26838F", "#6DCD59","#FDE725", "darkorange", "deeppink", "red3"))+
+      #ylab("Prevalence (%)")+
+      facet_wrap(~title) +
+      theme(panel.grid.minor=element_blank(), panel.grid.major = element_blank(), 
+            strip.background = element_rect(fill = "white"),
+            strip.text = element_text(hjust = 0),
+            axis.text.x=element_text(angle=45, vjust=1, hjust=1, size=10, color="black"), 
+            axis.text.y = element_text(color="black", size=10),
+            axis.title.x=element_blank(), 
+            axis.title.y=element_blank(), 
+            plot.title = element_text(color="black", size=10, hjust=0.02))+
+      coord_cartesian(ylim=c(0,85))+theme(legend.position = "none")+
+      scale_x_discrete(labels = function(x) str_wrap(x, width = 10))
+
+bottom_row <- plot_grid(TAC_prev_stats_community.type_virus_bar_MALED, TAC_prev_stats_community.type_parasite_bar_MALED, align = "h")
+
+TAC_prev_stats_community.type_bar_MALED <- plot_grid(TAC_prev_stats_community.type_bacteria_bar_MALED, bottom_row, ncol = 1)
+
+TAC_prev_stats_community.type_bar_MALED
+
+ggsave("~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Figures/Figure 3 and S4/prevalence_bar plot_MALED_20240722.jpg", plot=TAC_prev_stats_community.type_bar_MALED, height = 6, width = 6.5)
+```
+
+#Figure 4 (insert as is)
+```{r}
+#Table of presence/absence in each sample
+#Community.type data formating
+TAC_prev_stats_community.type <- TAC_pathogens%>%
+  group_by(Community.Type)%>%
+  dplyr::summarise(Average_number_of_pathogens=mean(Any_infection_noCOVID_number), sd=sd(Any_infection_noCOVID_number), n=n(), se=sd/n)%>%
+  mutate(pathogen="Any infection")
+
+TAC_prev_stats_community.type_bacteria <- TAC_pathogens%>%
+  group_by(Community.Type)%>%
+  dplyr::summarise(Average_number_of_pathogens=mean(Number_of_bacterial_pathogens), sd=sd(Number_of_bacterial_pathogens), n=n(), se=sd/n)%>%
+  mutate(pathogen="Bacteria")
+
+TAC_prev_stats_community.type_virus <- TAC_pathogens%>%
+  group_by(Community.Type)%>%
+  dplyr::summarise(Average_number_of_pathogens=mean(Any_virus_noCOVID_number), sd=sd(Any_virus_noCOVID_number), n=n(), se=sd/n)%>%
+  mutate(pathogen="Virus")
+
+TAC_prev_stats_community.type_parasite <- TAC_pathogens%>%
+  group_by(Community.Type)%>%
+  dplyr::summarise(Average_number_of_pathogens=mean(Number_of_parasite_pathogens), sd=sd(Number_of_parasite_pathogens), n=n(), se=sd/n)%>%
+  mutate(pathogen="Parasite")
+
+TAC_prev_stats_community.type_combined<-rbind(TAC_prev_stats_community.type, TAC_prev_stats_community.type_bacteria, TAC_prev_stats_community.type_virus, TAC_prev_stats_community.type_parasite)
+
+TAC_prev_stats_community.type_combined_plot <- ggplot(TAC_prev_stats_community.type_combined, aes(x=Community.Type, y=Average_number_of_pathogens,group=Community.Type))+
+   geom_point(aes(color=Community.Type), size=5)+
+   geom_errorbar(aes(ymin=Average_number_of_pathogens-se, ymax=Average_number_of_pathogens+se, width=0.05))+
+   coord_cartesian(ylim=c(0,5))+
+   theme(legend.position = "none", axis.title.x=element_blank())+
+   ylab("Average number of pathogens")+
+   ggtitle("Panel 1: Community type")+
+   #viridis::scale_color_viridis(discrete=T)+
+   scale_color_manual(values = c("#440154", "#3F4A8A", "#26838F", "#6DCD59","#FDE725"))+
+   facet_wrap(~factor(pathogen, c("Any infection", "Bacteria", "Virus", "Parasite")))
+
+#Community data formating
+TAC_prev_stats_community <- TAC_pathogens%>%
+  group_by(Community.Type, Community)%>%
+  dplyr::summarise(Average_number_of_pathogens=mean(Any_infection_noCOVID_number), sd=sd(Any_infection_noCOVID_number), n=n(), se=sd/n)%>%
+  mutate(pathogen="Any infection")
+
+TAC_prev_stats_community_bacteria <- TAC_pathogens%>%
+  group_by(Community.Type, Community)%>%
+  dplyr::summarise(Average_number_of_pathogens=mean(Number_of_bacterial_pathogens), sd=sd(Number_of_bacterial_pathogens), n=n(), se=sd/n)%>%
+  mutate(pathogen="Bacteria")
+
+TAC_prev_stats_community_virus <- TAC_pathogens%>%
+  group_by(Community.Type, Community)%>%
+  dplyr::summarise(Average_number_of_pathogens=mean(Any_virus_noCOVID_number), sd=sd(Any_virus_noCOVID_number), n=n(), se=sd/n)%>%
+  mutate(pathogen="Virus")
+
+TAC_prev_stats_community_parasite <- TAC_pathogens%>%
+  group_by(Community.Type, Community)%>%
+  dplyr::summarise(Average_number_of_pathogens=mean(Number_of_parasite_pathogens), sd=sd(Number_of_parasite_pathogens), n=n(), se=sd/n)%>%
+  mutate(pathogen="Parasite")
+
+TAC_prev_stats_community_combined<-rbind(TAC_prev_stats_community, TAC_prev_stats_community_bacteria, TAC_prev_stats_community_virus, TAC_prev_stats_community_parasite)
+
+TAC_prev_stats_community_combined_plot<-ggplot(TAC_prev_stats_community_combined, aes(x=reorder(Community, -Average_number_of_pathogens), y=Average_number_of_pathogens,group=Community.Type))+
+   geom_point(aes(color=Community.Type), size=5)+
+   geom_errorbar(aes(ymin=Average_number_of_pathogens-se, ymax=Average_number_of_pathogens+se, width=0.05))+
+   coord_cartesian(ylim=c(0,5))+
+   theme(legend.position = "bottom", axis.title.x=element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))+
+   ylab("Average number of pathogens")+
+   ggtitle("Panel 2: Community")+viridis::scale_color_viridis(discrete=T)+
+   facet_wrap(~factor(pathogen, c("Any infection", "Bacteria", "Virus", "Parasite")))
+
+TAC_prev_stats_community.type_combined_plot_combined <- TAC_prev_stats_community.type_combined_plot / TAC_prev_stats_community_combined_plot
+
+#ggsave("Figures/prevalence.jpg", plot=TAC_prev_stats_community.type_combined_plot_combined, height = 6, width = 6.5)
+
+TAC_pathogens_boxplot_Any_infection_noCOVID_number <- TAC_pathogens%>%
+  dplyr::rename(Pathogen_number = Any_infection_noCOVID_number)%>%
+  mutate(Pathogen_type = "Any infection")%>%
+  select(house_ID, Community.Type, Pathogen_number, Pathogen_type)
+
+TAC_pathogens_boxplot_Any_virus_noCOVID_number <- TAC_pathogens%>%
+  dplyr::rename(Pathogen_number = Any_virus_noCOVID_number)%>%
+  mutate(Pathogen_type = "Virus")%>%
+  select(house_ID, Community.Type, Pathogen_number, Pathogen_type)
+
+TAC_pathogens_boxplot_Number_of_bacterial_pathogens <- TAC_pathogens%>%
+  dplyr::rename(Pathogen_number = Number_of_bacterial_pathogens)%>%
+  mutate(Pathogen_type = "Bacteria")%>%
+  select(house_ID, Community.Type, Pathogen_number, Pathogen_type)
+
+TAC_pathogens_boxplot_Number_of_parasite_pathogens <- TAC_pathogens%>%
+  dplyr::rename(Pathogen_number = Number_of_parasite_pathogens)%>%
+  mutate(Pathogen_type = "Parasite")%>%
+  select(house_ID, Community.Type, Pathogen_number, Pathogen_type)
+
+TAC_pathogens_combined <- rbind(TAC_pathogens_boxplot_Any_infection_noCOVID_number, TAC_pathogens_boxplot_Any_virus_noCOVID_number, TAC_pathogens_boxplot_Number_of_bacterial_pathogens, TAC_pathogens_boxplot_Number_of_parasite_pathogens)
+
+TAC_pathogens_combined_overall <- TAC_pathogens_combined%>%
+  mutate(Community.Type = "All communities")
+
+TAC_pathogens_combined2 <- rbind(TAC_pathogens_combined_overall, TAC_pathogens_combined)%>%
+  mutate(Community.Type = case_when(Community.Type == "urban" ~ "Urban",
+                                    Community.Type == "semi-urban" ~ "Intermediate",
+                                    Community.Type == "rural - road" ~ "Rural (road)",
+                                    Community.Type == "rural - river" ~ "Rural (river)",
+                                    TRUE ~ Community.Type))%>%
+  mutate(Community.Type= factor(Community.Type, levels = c("All communities", "Urban", "Intermediate", "Rural (road)", "Rural (river)"), ordered = TRUE))
+
+TAC_pathogens_combined2_fig <- TAC_pathogens_combined2%>%
+  mutate(Pathogen_type = case_when(Pathogen_type=="Any infection" ~ "a) Any infection",
+                                   Pathogen_type=="Bacteria" ~ "b) Bacteria",
+                                   Pathogen_type=="Virus" ~ "c) Virus",
+                                   Pathogen_type=="Parasite" ~ "d) Parasite",
+                                   TRUE ~ Pathogen_type))
+
+TAC_prev_stats_community.type_combined_boxplot <- ggplot(TAC_pathogens_combined2_fig, aes(x=Community.Type, y=Pathogen_number, group=Community.Type))+
+   geom_boxplot(aes(color=Community.Type))+
+   coord_cartesian(ylim=c(0,8))+
+   theme(legend.position = "bottom", 
+         axis.text.x=element_text(angle=45, vjust=1, hjust=1, color="black", size=10),
+         axis.text.y = element_text(color = "black", size=10),
+         axis.title.x=element_blank(),
+         axis.title.y=element_text(color = "black", size=10),
+         strip.background = element_rect(colour="black", fill="white"),
+         strip.text = element_text(hjust = 0, color = "black", size=10),
+         legend.text = element_text(color = "black", size=10),
+         
+         panel.grid.minor=element_blank(), 
+         panel.grid.major = element_blank(),
+         
+         legend.title = element_blank(),
+         )+
+   ylab("Average number of pathogens")+
+   #ggtitle("Panel 1: Community type")+
+   #viridis::scale_color_viridis(discrete=T)+
+   scale_color_manual(values = c("#440154", "#3F4A8A", "#26838F", "#6DCD59","#FDE725"))+
+   facet_wrap(~factor(Pathogen_type, c("a) Any infection", "b) Bacteria", "c) Virus", "d) Parasite")))
+  #guides(color = guide_legend(title = "Community type"))
+
+TAC_prev_stats_community.type_combined_boxplot
+
+ggsave("Figures/Figure 4/prevalence_boxplot_20240614.jpg", plot=TAC_prev_stats_community.type_combined_boxplot, height = 5, width = 6.5)
+```
+
+#Figure 2 - new code (no post-processing)
+```{r}
+test <- d %>%
+  select(house_ID, Community.Type, hhcrowd, imp_floors, imp_toilet,
+         imp_water_jmp, storewat, wat_detect, mhand_detect,
+         chand_detect, animal_score_overall_child, hygiene) %>%
+  reshape2::melt(id.vars = c("house_ID", "Community.Type")) %>%
+  group_by(Community.Type, variable) %>%
+  dplyr::summarize(mean=mean(value, na.rm = T), sd=sd(value, na.rm = T), n=n(), se=sd/sqrt(n)) %>%
+  mutate(se = ifelse(variable %in% c("hygiene", "animal_score_overall_child"), se, NA),
+         mean = ifelse(variable %in% c("hygiene", "animal_score_overall_child"), mean, mean*100),
+         Community.Type = factor(Community.Type, 
+                                 levels = c("urban", "semi-urban", "rural - road", "rural - river"),
+                                 labels = c("Urban", "Intermediate",
+                                                            "Rural (road)", "Rural (river)")),
+         variable = factor(variable,
+                           levels = c("hhcrowd", "imp_floors", "imp_toilet", "imp_water_jmp", "storewat",
+                                      "wat_detect", "mhand_detect", "chand_detect", "animal_score_overall_child", "hygiene"),
+                           labels = c("a) Crowding", "b) Improved flooring", "c) Improved toilet", 
+                                      "d) Improved water", "e) Water stored", "f) E. coli in drinking water", 
+                                      "g) E. coli in maternal handwash", "h) E. coli in child handwash",
+                                      "i) Animal score", "j) Hygiene score")))
+
+plot1 <- test %>%
+  filter(variable %in% c("a) Crowding", "b) Improved flooring", "c) Improved toilet", 
+                           "d) Improved water", "e) Water stored")) %>%
+  ggplot(aes(x = Community.Type, y = mean)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se), width=0.1) +
+  geom_line(aes(group = variable)) +
+  facet_wrap(~variable, ncol = 1) +
+  ylim(0,100) +
+  ylab("Percentage of households") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        panel.spacing = unit(0.1, "cm"),
+        axis.text.x = element_text(size = 8, color="black"),
+        axis.text.y = element_text(size = 8, color="black"),
+        strip.background = element_rect(colour="black", fill="white"),
+        
+        legend.text = element_text(size = 8, color="black"),
+        axis.title = element_text(size = 8, color="black"),
+        strip.text = element_text(hjust = 0, size = 8, color="black"))+
+  theme(legend.position="blank",
+        legend.title= element_blank(),
+        plot.margin = unit(c(0,0.25,0,0.25), "cm")) +
+  xlab("Community Type")
+
+plot2 <- test %>%
+  filter(variable %in% c("f) E. coli in drinking water", 
+                           "g) E. coli in maternal handwash", "h) E. coli in child handwash")) %>%
+  ggplot(aes(x = Community.Type, y = mean)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se), width=0.1) +
+  geom_line(aes(group = variable)) +
+  facet_wrap(~variable, ncol = 1) +
+  ylim(0,100) +
+  ylab("Percentage of households") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        panel.spacing = unit(0.1, "cm"),
+        axis.text.x = element_text(size = 8, color="black"),
+        axis.text.y = element_text(size = 8, color="black"),
+        strip.background = element_rect(colour="black", fill="white"),
+        
+        legend.text = element_text(size = 8, color="black"),
+        axis.title = element_text(size = 8, color="black"),
+        strip.text = element_text(hjust = 0, size = 8, color="black"))+
+  theme(legend.position="blank",
+        legend.title= element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.margin = unit(c(0,0.25,0,0.25), "cm"))
+
+plot3 <- test %>%
+  filter(variable == "i) Animal score") %>%
+  ggplot(aes(x = Community.Type, y = mean)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se), width=0.1) +
+  geom_line(aes(group = variable)) +
+  facet_wrap(~variable, scales = "free") +
+  ylim(0.0, 0.5) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(size = 8, color="black"),
+        axis.text.y = element_text(size = 8, color="black"),
+        strip.background = element_rect(colour="black", fill="white"),
+        
+        legend.text = element_text(size = 8, color="black"),
+        axis.title = element_text(size = 8, color="black"),
+        strip.text = element_text(hjust = 0, size = 8, color="black"))+
+  theme(legend.position="blank",
+        legend.title= element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.margin = unit(c(0,0.25,0,0.25), "cm")) +
+  ylab("Mean score")
+
+plot4 <- test %>%
+  filter(variable == "j) Hygiene score") %>%
+  ggplot(aes(x = Community.Type, y = mean)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se), width=0.1) +
+  geom_line(aes(group = variable)) +
+  facet_wrap(~variable, scales = "free") +
+  ylim(0,8) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(size = 8, color="black"),
+        axis.text.y = element_text(size = 8, color="black"),
+        strip.background = element_rect(colour="black", fill="white"),
+        
+        legend.text = element_text(size = 8, color="black"),
+        axis.title = element_text(size = 8, color="black"),
+        strip.text = element_text(hjust = 0, size = 8, color="black"))+
+  theme(legend.position="blank",
+        legend.title= element_blank(),
+        plot.margin = unit(c(0,0.25,0,0.25), "cm")) +
+  ylab("Mean score") +
+  xlab("Community Type")
+
+right <- plot_grid(plot2, plot3, plot4, ncol = 1, align = "v", rel_heights = c(1, 0.335, 0.39))
+
+plot_grid(plot1, right)
+
+ggsave("~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Figures/Figure 2/Figure 2 NEW 240723.jpg", 
+       height = 8, width = 7)
+```
+
+#Figure 2 (need to stack 3 files in docx) - old code
+```{r}
+d <- readRDS("Export_files/6mo analysis data.rds") 
+
+#done: crowding, flooring, toilet, water, water stored, e coli in drinking water, maternal handwash, child handwash, rainy, animal, hygiene score
+
+d_crowding <- d%>%
+  select(Community.Type, hhcrowd)%>%
+  group_by(Community.Type, hhcrowd)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(hhcrowd==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "Crowding",
+         Domain = "SES")
+
+d_flooring <- d%>%
+  select(Community.Type, imp_floors)%>%
+  group_by(Community.Type, imp_floors)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(imp_floors==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "Improved flooring",
+         Domain = "SES")
+
+d_toilet <- d%>%
+  select(Community.Type, imp_toilet)%>%
+  group_by(Community.Type, imp_toilet)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(imp_toilet==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "Improved toilet",
+         Domain = "Sanitation")
+
+d_water <- d%>%
+  select(Community.Type, imp_water_jmp)%>%
+  group_by(Community.Type, imp_water_jmp)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(imp_water_jmp==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "Improved water",
+         Domain = "Water")
+
+d_water_stored <- d%>%
+  select(Community.Type, storewat)%>%
+  group_by(Community.Type, storewat)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(storewat==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "Water stored",
+         Domain = "Water")
+
+d_watdetect <- d%>%
+  select(Community.Type, wat_detect)%>%
+  group_by(Community.Type, wat_detect)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(wat_detect==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "E. coli in drinking water",
+         Domain = "Water")
+
+d_mhand <- d%>%
+  select(Community.Type, mhand_detect)%>%
+  group_by(Community.Type, mhand_detect)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(mhand_detect==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "E. coli in maternal handwash",
+         Domain = "Hygiene")
+
+d_chand <- d%>%
+  select(Community.Type, chand_detect)%>%
+  group_by(Community.Type, chand_detect)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(chand_detect==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "E. coli in child handwash",
+         Domain = "Hygiene")
+
+d_rainy <- d%>%
+  select(Community.Type, rainy)%>%
+  group_by(Community.Type, rainy)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(rainy==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "Rainy",
+         Domain = "Climate")
+
+#animal
+d_animal <- d%>%
+  select(Community.Type, animal_score_overall_child)%>%
+  subset(animal_score_overall_child != 0)%>%
+  mutate(animal_quartile = ntile(animal_score_overall_child, 3))
+
+d_animal2 <- d%>%
+  select(Community.Type, animal_score_overall_child)%>%
+  mutate(animal_score = case_when(animal_score_overall_child > 0.68 ~ 1, animal_score_overall_child <= 0.68 ~ 0, TRUE ~ 0))
+
+d_animal3 <- d_animal2%>%
+  select(Community.Type, animal_score)%>%
+  group_by(Community.Type, animal_score)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(animal_score==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "High animal exposure score",
+         Domain = "Animal")
+
+#hygiene
+d_hygiene <- d%>%
+  select(Community.Type, hygiene)%>%
+  subset(hygiene != 0)%>%
+  mutate(hygiene_quartile = ntile(hygiene, 3))
+
+d_hygiene2 <- d%>%
+  select(Community.Type, hygiene)%>%
+  mutate(hygiene_score = case_when(hygiene > 7 ~ 1, hygiene <= 7 ~ 0, TRUE ~ 0))
+
+d_hygiene3 <- d_hygiene2%>%
+  select(Community.Type, hygiene_score)%>%
+  group_by(Community.Type, hygiene_score)%>%
+  dplyr::summarize(new_var = n())%>%
+  mutate(percentage = case_when(Community.Type == "urban" ~ new_var / 67,
+                                Community.Type == "semi-urban" ~ new_var / 87,
+                                Community.Type == "rural - road" ~ new_var / 97,
+                                Community.Type == "rural - river" ~ new_var / 25,
+                                TRUE ~ 0))%>%
+  subset(hygiene_score==1)%>%
+  ungroup()%>%
+  select(Community.Type, percentage)%>%
+  mutate(category = "High hygiene score",
+         Domain = "Hygiene")
+
+#plot
+category_summary2 <- rbind(d_crowding, d_flooring, d_toilet, d_water, d_water_stored, d_watdetect, d_mhand, d_chand)%>%
+  mutate(Community.Type = case_when(Community.Type == "urban" ~ "Urban",
+                                Community.Type == "semi-urban" ~ "Intermediate",
+                                Community.Type == "rural - road" ~ "Rural (road)",
+                                Community.Type == "rural - river" ~ "Rural (river)",
+                                TRUE ~ "Unknown"))
+
+category_summary3 <- category_summary2%>%
+  mutate(category = case_when(category == "Crowding" ~ "a) Crowding",
+                              category == "Improved flooring" ~ "b) Improved flooring",
+                              category == "Improved toilet" ~ "c) Improved toilet",
+                              category == "Improved water" ~ "d) Improved water",
+                              category == "Water stored" ~ "e) Water stored",
+                              category == "E. coli in drinking water" ~ "f) E. coli in drinking water",
+                              category == "E. coli in maternal handwash" ~ "g) E. coli in maternal handwash",
+                              category == "E. coli in child handwash" ~ "h) E. coli in child handwash"))
+
+category_summary_plot3 <- ggplot(category_summary3, aes(y=percentage, x=factor(Community.Type, level=c("Urban", "Intermediate", "Rural (road)", "Rural (river)")), group=factor(category, level=c("a) Crowding", "b) Improved flooring", "c) Improved toilet", "d) Improved water", "e) Water stored", "f) E. coli in drinking water", "g) E. coli in maternal handwash", "h) E. coli in child handwash")))) +
+  geom_line(linewidth = 0.5) +
+  geom_point()+
+  ylab("Percentage of households") +
+  #xlab("Community Type") +
+  ylim(0, 100)+
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+         axis.text.x = element_text(size = 8, color="black"),
+         axis.text.y = element_text(size = 8, color="black"),
+        strip.background = element_rect(colour="black", fill="white"),
+         
+        legend.text = element_text(size = 8, color="black"),
+         axis.title = element_text(size = 8, color="black"),
+         strip.text = element_text(hjust = 0, size = 8, color="black"))+
+      #viridis::scale_color_viridis(option="viridis", discrete=T) +
+  #scale_y_continuous(limits=c(0, 1), label = scales::percent)+ 
+  scale_y_continuous(labels=function(x) format(x*100))+
+  theme(legend.position="blank",
+        legend.title= element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())+ 
+guides(color = guide_legend(nrow = 3))+
+  facet_wrap(~factor(category, level=c("a) Crowding", "b) Improved flooring", "c) Improved toilet", "d) Improved water", "e) Water stored", "f) E. coli in drinking water", "g) E. coli in maternal handwash", "h) E. coli in child handwash")), nrow=8)
+
+category_summary_plot3
+
+hygiene_chart2 <- d%>%
+  select(Community.Type, hygiene)%>%
+  group_by(Community.Type)%>%
+  dplyr::summarise(mean=mean(hygiene), sd=sd(hygiene), n=n(), se=sd/sqrt(n))%>%
+  mutate(Community.Type = case_when(Community.Type == "urban" ~ "Urban",
+                                Community.Type == "semi-urban" ~ "Intermediate",
+                                Community.Type == "rural - road" ~ "Rural (road)",
+                                Community.Type == "rural - river" ~ "Rural (river)",
+                                TRUE ~ "Unknown"))%>%
+  ungroup()%>%
+  mutate(category = "j) Hygiene score",
+         Domain = "Hygiene")
+
+animal_chart2 <- d%>%
+  select(Community.Type, animal_score_overall_child)%>%
+  subset(!is.na(animal_score_overall_child))%>%
+  group_by(Community.Type)%>%
+  dplyr::summarise(mean=mean(animal_score_overall_child), sd=sd(animal_score_overall_child), n=n(), se=sd/sqrt(n))%>%
+  mutate(Community.Type = case_when(Community.Type == "urban" ~ "Urban",
+                                Community.Type == "semi-urban" ~ "Intermediate",
+                                Community.Type == "rural - road" ~ "Rural (road)",
+                                Community.Type == "rural - river" ~ "Rural (river)",
+                                TRUE ~ "Unknown"))%>%
+  ungroup()%>%
+  mutate(category = "i) Animal score",
+         Domain = "Animals")
+
+hygiene_bar2 <- ggplot(hygiene_chart2, aes(y=mean, x=factor(Community.Type, level=c("Urban", "Intermediate", "Rural (road)", "Rural (river)")), group=factor(category, level=c("j) Hygiene score")))) +
+  geom_line(linewidth = 0.5) +
+  geom_point()+
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=0.1)+
+  ylab("Mean score") +
+  xlab("Community Type") +
+  ylim(0, 8)+
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+         axis.text.x = element_text(size = 8, color="black"),
+         axis.text.y = element_text(size = 8, color="black"),
+        strip.background = element_rect(colour="black", fill="white"),
+         
+        legend.text = element_text(size = 8, color="black"),
+         axis.title = element_text(size = 8, color="black"),
+         strip.text = element_text(hjust = 0, size = 8, color="black"))+
+  #scale_y_continuous(limits=c(0, 10))+ 
+  theme(legend.position="blank",
+        legend.title= element_blank(),
+        axis.title.x = element_text(size = 8, color="black"),
+        axis.text.x = element_text(size = 8, color="black"))+ 
+guides(color = guide_legend(nrow = 3))+
+  facet_wrap(~factor(category, level=c("j) Hygiene score")), nrow=2)
+
+animal_bar2 <- ggplot(animal_chart2, aes(y=mean, x=factor(Community.Type, level=c("Urban", "Intermediate", "Rural (road)", "Rural (river)")), group=factor(category, level=c("i) Animal score")))) +
+  geom_line(linewidth = 0.5) +
+  geom_point()+
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=0.1)+
+  ylab("Mean score") +
+  xlab("Community Type") +
+  ylim(0, .5)+
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+         axis.text.x = element_text(size = 8, color="black"),
+         axis.text.y = element_text(size = 8, color="black"),
+        strip.background = element_rect(colour="black", fill="white"),
+         
+        legend.text = element_text(size = 8, color="black"),
+         axis.title = element_text(size = 8, color="black"),
+         strip.text = element_text(hjust = 0, size = 8, color="black"))+
+  #scale_y_continuous(limits=c(0, 10))+ 
+  theme(legend.position="blank",
+        legend.title= element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())+ 
+guides(color = guide_legend(nrow = 3))+
+  facet_wrap(~factor(category, level=c("i) Animal score")), nrow=2)
+
+hygiene_bar2
+animal_bar2
+
+ggsave("Figures/Figure 2/exposures_stacked.jpg", plot=category_summary_plot3, height = 7, width = 4)
+ggsave("Figures/Figure 2/exposures_stacked_animal.jpg", plot=animal_bar2, height = 1.1, width = 4)
+ggsave("Figures/Figure 2/exposures_stacked_hygiene.jpg", plot=hygiene_bar2, height = 1.4, width = 4)
+
+```
+
+#Figure 7 and 8 (manipulate in ppt, save each slide as png)
+```{r}
+vi_scores <- readRDS("Export_files/vi_scores_20240614.rds") 
+
+vi_scores_outcomes <- vi_scores %>% 
+  mutate(color=case_when(Variable == "hhcrowd" ~ "gray95",
+                            Variable == "animal_score" ~ "gray95",
+                            Variable == "wat_detect" ~ "gray95",
+                            Variable == "hygiene" ~ "white",
+                            Variable == "vacc4m" ~ "white",
+                            Variable == "vacc6m" ~ "white",
+                            Variable == "mhand_detect" ~ "white",
+                            Variable == "chand_detect" ~ "white",
+                            Variable == "rainy" ~ "gray95",
+                            Variable == "storewat" ~ "gray95",
+                         Variable == "imp_water_jmp" ~ "gray95",
+                            Variable == "vagbirth" ~ "white",
+                            Variable == "imp_toilet" ~ "white",
+                            Variable == "imp_floors" ~ "gray95",
+                            Variable == "imp_water" ~ "gray95",
+                            Variable == "urban" ~ "white",
+                            Variable == "semiurban" ~ "white",
+                            Variable == "ruralroad" ~ "white",
+                            Variable == "ruralriver" ~ "white",
+                              TRUE ~"Unknown"))%>%
+  mutate(Importance = ifelse(Sign == "NEG", Importance*-1, Importance),
+         Sign = ifelse(Sign == "NEG", "Negative", "Positive"),
+         newvar = case_when(Variable == "hhcrowd" ~ "Household crowding",
+                            Variable == "animal_score" ~ "Animal score",
+                            Variable == "wat_detect" ~ "E. coli in drinking water",
+                            Variable == "hygiene" ~ "Hygiene score",
+                            Variable == "vacc4m" ~ "4 month vaccines completed",
+                            Variable == "vacc6m" ~ "6 month vaccines completed",
+                            Variable == "mhand_detect" ~ "E. coli in maternal handwash",
+                            Variable == "chand_detect" ~ "E. coli in child handwash",
+                            Variable == "rainy" ~ "Season (rainy)",
+                            Variable == "storewat" ~ "Water stored",
+                            Variable == "vagbirth" ~ "Vaginal birth",
+                            Variable == "imp_toilet" ~ "Improved toilet",
+                            Variable == "imp_floors" ~ "Improved floors",
+                      Variable == "imp_water_jmp" ~ "Improved water",
+                            Variable == "urban" ~ "Urban",
+                            Variable == "semiurban" ~ "Intermediate",
+                            Variable == "ruralroad" ~ "Rural (road)",
+                            Variable == "ruralriver" ~ "Rural (river)"))%>%
+  subset(outcome == "anyinfection" | outcome == "coinfection" | outcome == "numpathogens" | outcome == "anybacteria" | outcome == "anyvirus" | outcome == "anyparasite" | outcome == "EAEC"  | outcome == "DAEC" | outcome == "tEPEC"| outcome == "ETEC" | outcome == "EIEC_or_Shigella" | outcome == "Campylobacter" | outcome == "Enterovirus" | outcome == "Rotavirus" | outcome == "Adenovirus" | outcome == "Norovirus" | outcome == "Giardia_18S")%>%
+mutate(outcome = case_when(outcome == "anyinfection" ~ "Any infection",
+                             outcome == "coinfection" ~ "Co-infection",
+                             outcome == "numpathogens" ~ "Pathogen no.",
+                             outcome == "anybacteria" ~ "Any bacteria",
+                             outcome == "anyvirus" ~ "Any virus",
+                           outcome == "anyparasite" ~ "Any parasite",
+                             outcome == "Giardia_18S" ~ "Giardia",
+                           outcome == "EIEC_or_Shigella" ~ "EIEC/Shigella",
+                             TRUE ~ outcome))
+  
+theme_set(theme_bw())
+
+vi_scores_outcomes1 <- vi_scores_outcomes%>%
+  subset(outcome == "Any infection" | outcome == "Co-infection" | outcome == "Pathogen no." | outcome == "Any bacteria" | outcome == "Any virus" | outcome == "Any parasite" | outcome == "EAEC"  | outcome == "DAEC")
+
+vi_scores_outcomes2 <- vi_scores_outcomes%>%
+  subset(outcome == "tEPEC" | outcome == "ETEC" |  outcome == "Adenovirus" | outcome == "Enterovirus" | outcome == "Rotavirus" | outcome == "Norovirus" | outcome == "Giardia"| outcome == "Co-infection")
+
+elastic_net_fig_test1 <- vi_scores_outcomes1 %>%
+  mutate(newvar=factor(newvar, levels = c("Season (rainy)", "Hygiene score", "E. coli in child handwash", "E. coli in maternal handwash", "E. coli in drinking water", "Water stored", "Improved water", "Improved toilet", "Animal score", "Rural (river)", "Rural (road)", "Intermediate", "Urban", "Improved floors", "Household crowding")))%>%
+  ggplot() +
+  geom_vline(aes(xintercept = newvar, colour = color), size=6) + 
+  geom_hline(yintercept = 0, linetype=3)+
+  geom_col(aes(x = newvar, y = Importance, fill = Sign)) +
+      coord_flip() +
+  viridis::scale_fill_viridis(discrete = T)+
+  guides(fill = guide_legend(reverse=TRUE)) +
+  labs(x = "", fill = "Direction of\nAssociation") +
+  facet_grid(~factor(outcome, c("Any infection", "Co-infection", "Pathogen no.", "Any bacteria", "Any virus", "Any parasite", "EAEC", "DAEC")), scales = "free")+
+  theme(axis.text=element_text(size=4, color = "black"), 
+        axis.title = element_text(size = 6, color = "black"),
+        axis.title.y = element_blank(), 
+        axis.text.y = element_blank(), 
+        axis.title.x = element_blank(), 
+        axis.ticks.y = element_blank(),
+        strip.text.x = element_text(size = 6, color = "black"),
+        legend.position = "none",
+        legend.text = element_text(size=6, color = "black"),
+        legend.title = element_text(size=6, color = "black"))+
+  scale_color_identity()
+
+elastic_net_fig_test2 <- vi_scores_outcomes2 %>%
+  mutate(newvar=factor(newvar, levels = c("Season (rainy)", "Hygiene score", "E. coli in child handwash", "E. coli in maternal handwash", "E. coli in drinking water", "Water stored", "Improved water", "Improved toilet", "Animal score", "Rural (river)", "Rural (road)", "Intermediate", "Urban", "Improved floors", "Household crowding")))%>%
+  ggplot() +
+  geom_vline(aes(xintercept = newvar, colour = color), size=6) + 
+  geom_hline(yintercept = 0, linetype=3)+
+  geom_col(aes(x = newvar, y = Importance, fill = Sign)) +
+      coord_flip() +
+  viridis::scale_fill_viridis(discrete = T)+
+  guides(fill = guide_legend(reverse=TRUE)) +
+  labs(x = "", fill = "Direction of\nAssociation") +
+  facet_grid(~factor(outcome, c("tEPEC", "ETEC", "Adenovirus", "Enterovirus", "Rotavirus", "Norovirus", "Giardia", "Co-infection")), scales = "free")+
+  theme(axis.text=element_text(size=4, color = "black"), 
+        axis.title = element_text(size = 6, color = "black"),
+        axis.title.y = element_blank(), 
+        axis.text.y = element_blank(), 
+        axis.title.x = element_blank(), 
+        axis.ticks.y = element_blank(),
+        strip.text.x = element_text(size = 6, color = "black"),
+        legend.position = "none",
+        legend.text = element_text(size=6, color = "black"),
+        legend.title = element_text(size=6, color = "black"))+
+  scale_color_identity()
+
+elastic_net_fig_test2
+
+ggsave(filename = "Figures/Figure 7 and 8/Elastic net results_20240515_1_20240614.jpg", plot=elastic_net_fig_test1, width = 6, height = 3)
+ggsave(filename = "Figures/Figure 7 and 8/Elastic net results_20240515_2_20240614.jpg", plot=elastic_net_fig_test2, width = 6, height = 3)
+```
+
+#Table 1 (need to format in docx)
+```{r}
+d <- readRDS("Export_files/6mo analysis data.rds") 
+
+
+d <- d %>%
+  select(-anyvirus) %>%
+  dplyr::rename(comm_type = Community.Type,
+         animal_score = animal_score_overall_child,
+         vacc4m = four_month_vaccines,
+         vacc6m = six_month_vaccines,
+         age_day = age_in_days,
+         anyinfection = Any_infection_noCOVID,
+         coinfection = Any_co_infection_noCOVID,
+         anyvirus = Any_virus_noCOVID,
+         numpathogens = Any_infection_noCOVID_number) %>%
+  mutate(comm_type = factor(comm_type, 
+                            levels = c("urban", "semi-urban",
+                                       "rural - road", "rural - river"),
+                            labels = c("Urban", "Semi-urban",
+                                       "Rural (road)", "Rural (river)")))
+
+#select outcomes
+outcomes <- c("anyinfection", "coinfection", "numpathogens", 
+              "anybacteria", "EAEC", "DAEC", "STEC", "aEPEC", "tEPEC", "EHEC", "ETEC", "EIEC_or_Shigella", "Campylobacter", "Salmonella", 
+              "anyvirus", "Adenovirus", "Astrovirus", "Enterovirus", "Norovirus", "Rotavirus", "Sapovirus", 
+              "anyparasite", "Ascaris", "Cryptosporidium", "Cyclospora_cayetanesis", "Entamoeba", "Giardia_18S", "Trichuris")
+
+exposures <- c("comm_type")
+
+table1 <- d %>%
+  select(all_of(exposures), all_of(outcomes)) %>%
+  tbl_summary(by = comm_type,
+              type = list(all_continuous() ~ "continuous2",
+                          numpathogens ~ "continuous2"),
+              statistic = all_continuous() ~ c("{median} ({p25}, {p75})", "{min}, {max}"),
+              missing_text = "Missing",
+              label = list(anyinfection ~ "Any pathogen",
+                            anybacteria ~ "Any bacterial pathogen",
+                            anyvirus ~ "Any viral pathogen",     
+                            anyparasite ~ "Any parasitic pathogen",   
+                            #zoonotic ~ "Any zoonotic pathogen",     
+                            coinfection ~ "Any co-infection",
+                            numpathogens ~ "Number of pathogens"),
+              digits = list(numpathogens ~ 0)) %>%
+  add_overall() %>%
+  modify_header(label ~ "**Variable**")
+
+table1 <- table1 %>%
+  as_flex_table() 
+
+# flextable::save_as_docx(table1, path = "~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/CH tables figs/descriptive table.docx")
+flextable::save_as_docx(table1, path = "Figures/Table 1/descriptive table for pathogens_NAZ_20240614.docx")
+```
+
+#MVM formatting (run before Figures 5, 6 or S2)
+```{r}
+MVM_most <- readRDS("Export_files/MVM results_individual exposures_most exposures_20240614.rds")
+MVM_jmp <- readRDS("Export_files/MVM results_individual exposures_jmp_20240614.rds")
+MVM_toilet <- readRDS("Export_files/MVM results_individual exposures_toilet_20240614.rds")
+
+MVM <- rbind(MVM_most, MVM_jmp, MVM_toilet) %>%
+  mutate(label=case_when(exposure=="rainy" ~ "Rainy",
+                         exposure=="hygiene" ~ "Hygiene score",
+                         exposure=="animal_score" ~ "Animal score",
+                         exposure=="wat_detect" ~ "E. coli in drinking water",
+                         exposure=="mhand_detect" ~ "E. coli in maternal handwash",
+                         exposure=="chand_detect" ~ "E. coli in child handwash",
+                         exposure=="storewat" ~ "Water stored",
+                         exposure=="hhcrowd" ~ "Crowding",
+                         exposure=="imp_floors" ~ "Improved flooring",
+                         
+                         exposure=="imp_water_jmp" ~ "Improved water",
+                         
+                         exposure=="imp_toilet" ~ "Improved toilet",
+                         level=="Semi-urban" ~ "Community type: Semi-urban", 
+                         level=="Rural (road)" ~ "Community type: Rural (road)", 
+                         level=="Rural (river)" ~ "Community type: Rural (river)", 
+                         TRUE ~ level))%>%
+  mutate(label_exposure=case_when(exposure=="rainy" ~ "Rainy",
+                         exposure=="hygiene" ~ "Hygiene score",
+                         exposure=="animal_score" ~ "Animal score",
+                         exposure=="wat_detect" ~ "E. coli in drinking water",
+                         exposure=="mhand_detect" ~ "E. coli in maternal handwash",
+                         exposure=="chand_detect" ~ "E. coli in child handwash",
+                         exposure=="storewat" ~ "Water stored",
+                         exposure=="hhcrowd" ~ "Crowding",
+                         exposure=="imp_floors" ~ "Improved flooring",
+                         
+                         exposure=="imp_water_jmp" ~ "Improved water",
+                         
+                         exposure=="imp_toilet" ~ "Improved toilet",
+                         level=="Semi-urban" ~ "Community type", 
+                         level=="Rural (road)" ~ " ", 
+                         level=="Rural (river)" ~ " ", 
+                         TRUE ~ exposure))%>%
+  mutate(adjusted_color=case_when(adjusted=="Adjusted"~"#482677FF",
+                                  adjusted=="Unadjusted"~"#29AF7FFF"))%>%
+  mutate(p_value_table = case_when(p.value < 0.05 ~ "*",
+                                   TRUE ~ " "))
+
+MVM$CI <- paste(round(MVM$conf.low, digits=3), round(MVM$conf.high, digits=3), sep=",")
+MVM$label_table <- paste(MVM$label, MVM$adjusted, sep="_")
+
+MVM<-MVM%>%
+  mutate(label = as.character(label)) %>%
+  mutate(label_figure = ifelse(grepl("_Unadjusted", label_table), label, " "))%>%
+  mutate(label_exposure = ifelse(grepl("_Unadjusted", label_table), label_exposure, " "))%>%
+  mutate(level_table = ifelse(grepl("_Unadjusted", label_table), level, " "))%>%
+  mutate(label_table=factor(label_table, levels = c("Rainy_Adjusted","Rainy_Unadjusted", 
+                                                    "Hygiene score_Adjusted","Hygiene score_Unadjusted",
+                                                    
+                                                    "E. coli in child handwash_Adjusted","E. coli in child handwash_Unadjusted",
+                                                    "E. coli in maternal handwash_Adjusted", "E. coli in maternal handwash_Unadjusted", 
+                                                    
+                                                    "E. coli in drinking water_Adjusted","E. coli in drinking water_Unadjusted", 
+                                                    "Water stored_Adjusted","Water stored_Unadjusted",
+                                                    
+                                                    "Improved water_Adjusted", "Improved water_Unadjusted", 
+                                                    
+                                                    "Improved toilet_Adjusted","Improved toilet_Unadjusted", 
+                                                    
+                                                    "Animal score_Adjusted","Animal score_Unadjusted",
+                                                    "Community type: Rural (river)_Adjusted","Community type: Rural (river)_Unadjusted", 
+                                                    "Community type: Rural (road)_Adjusted", "Community type: Rural (road)_Unadjusted", 
+                                                    "Community type: Semi-urban_Adjusted", "Community type: Semi-urban_Unadjusted", 
+                                                    
+                                                    "Improved flooring_Adjusted", "Improved flooring_Unadjusted", 
+                                                    
+                                                    "Crowding_Adjusted", "Crowding_Unadjusted")),
+         
+         label=factor(label, levels = c("Rainy", 
+                                        
+                                        "Hygiene score",
+                                        
+                                        "E. coli in child handwash",
+                                        "E. coli in maternal handwash", 
+                                        
+                                        "E. coli in drinking water",
+                                        "Water stored",
+                                        
+                                        "Improved water",
+                                        
+                                        "Improved toilet", 
+                                        
+                                        "Animal score",
+                                        "Community type: Rural (river)", 
+                                        "Community type: Rural (road)", 
+                                        "Community type: Semi-urban", 
+                                        
+                                        "Improved flooring", 
+                                        
+                                        "Crowding")))%>%
+  
+  mutate(color=case_when(exposure=="hhcrowd" ~ "gray95",
+                              
+                              label=="Community type: Rural (river)" ~ "white",
+                              label=="Community type: Rural (road)" ~ "white",
+                              label=="Community type: Semi-urban" ~ "white",
+                              exposure=="animal_score"~"gray95",
+                              label=="Improved toilet"~"white",
+                              
+                              label=="Water stored"~"gray95",
+                              label=="E. coli in drinking water"~"gray95",
+                              
+                              label=="Improved water"~"gray95",
+                              
+                              
+                              label=="Improved flooring"~"gray95",
+                              
+                              label=="E. coli in child handwash"~"white",
+                              label=="E. coli in maternal handwash"~"white",
+                              label=="Hygiene score"~"white",
+                              label=="Rainy"~"gray95",
+                              
+                              TRUE~"Unknown"))%>%
+  mutate(Domain = case_when(label_table=="Crowding_Unadjusted" ~ "SES",
+                            label_table=="Community type: Semi-urban_Unadjusted" ~ "Urbanicity",
+                            label_table=="Animal score_Unadjusted" ~ "Animals",
+                            label_table=="Improved toilet_Unadjusted" ~ "Sanitation",
+                            label_table=="Improved water_Unadjusted" ~ "Water",
+                            label_table=="E. coli in maternal handwash_Unadjusted" ~ "Hygiene",
+                            label_table=="Rainy_Unadjusted" ~ "Climate",
+                            TRUE ~ " "),
+         Domain=factor(Domain, levels = c("SES", "Urbanicity", "Animals", "Sanitation", "Water", "Hygiene", "Climate")))
+```
+
+#Figure 5 and 6 (need to format in ppt)
+```{r}
+MVM_main <- MVM%>%
+  subset(outcome == "anyinfection" | outcome == "coinfection" | outcome == "numpathogens" | outcome == "anybacteria" | outcome == "anyvirus" | outcome == "EAEC"| outcome == "DAEC"| outcome == "ETEC"| outcome == "Salmonella"| outcome == "Norovirus"| outcome == "Astrovirus")%>%
+  
+  mutate(outcome = case_when(outcome == "anyinfection" ~ "Any infection",
+                             outcome == "coinfection" ~ "Co-infection",
+                             outcome == "numpathogens" ~ "Pathogen no.",
+                             outcome == "anybacteria" ~ "Any bacteria",
+                             outcome == "anyvirus" ~ "Any virus",
+                             outcome == "Giardia_18S" ~ "Giardia",
+                             TRUE ~ outcome))
+
+forestplot_test<-ggplot(MVM_main, aes(x=estimate, y=label, xmin=conf.low, xmax=conf.high, group=adjusted, color=adjusted_color))+
+  geom_hline(aes(yintercept = label, colour = color), size = 15) + 
+  geom_pointrange(shape=15, fill=MVM_main$adjusted_color, position=position_dodge(width=0.5), size=0.1)+
+  geom_vline(xintercept = 1, linetype=3)+
+  xlab("Risk ratio")+
+  #ylab("Adjusted relative risk with 95% confidence intervals")+
+  scale_color_identity()+
+  theme(plot.title = element_text(hjust = 0.5, size=2, colour = "white"), 
+        axis.text=element_text(size=6), 
+        axis.title = element_text(size = 6),
+        axis.title.y = element_blank(), 
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        strip.text.x = element_text(size = 6))+
+  #ggtitle("for formatting")+
+  facet_grid(~factor(outcome, c("Any infection", "Co-infection", "Pathogen no.", "Any bacteria", "Any virus", "EAEC", "DAEC", "ETEC", "Salmonella", "Norovirus", "Astrovirus")))+
+  coord_cartesian(xlim=c(0.08,7))+
+  #theme(plot.margin = unit(c(0,0.1,0,-0.5),"cm"))+
+  scale_x_continuous(trans="log", breaks = c(0.2, 1, 6))+
+  geom_text(aes(label=p_value_table), 
+            color="red",
+            position=position_dodge(width=0.5),
+            hjust=-0.05)
+
+forestplot_test
+
+ggsave("Figures/Figure 5 and 6/forestplot_maintext_20240614.jpg", plot=forestplot_test, height = 6.5, width = 10)
+```
+
+#Figure S2 (need to format in ppt)
+```{r}
+MVM_SI <- MVM%>%
+  subset(outcome == "anyparasite" | outcome == "aEPEC"| outcome == "tEPEC"| outcome == "EIEC_or_Shigella"| outcome == "Campylobacter"| outcome == "Adenovirus"| outcome == "Enterovirus"| outcome == "Rotavirus"| outcome == "Giardia_18S")%>%
+  mutate(outcome = case_when(outcome == "anyparasite" ~ "Any parasite",
+                             outcome == "Giardia_18S" ~ "Giardia",
+                             outcome == "EIEC_or_Shigella" ~ "EIEC/Shigella",
+                             TRUE ~ outcome))
+
+forestplot_test<-ggplot(MVM_SI, aes(x=estimate, y=label, xmin=conf.low, xmax=conf.high, group=adjusted, color=adjusted_color))+
+  geom_hline(aes(yintercept = label, colour = color), size = 15) + 
+  geom_pointrange(shape=15, fill=MVM_SI$adjusted_color, position=position_dodge(width=0.5), size=0.1)+
+  geom_vline(xintercept = 1, linetype=3)+
+  xlab("Risk ratio")+
+  #ylab("Adjusted relative risk with 95% confidence intervals")+
+  scale_color_identity()+
+  theme(plot.title = element_text(hjust = 0.5, size=2, colour = "white"), 
+        axis.text=element_text(size=6), 
+        axis.title = element_text(size = 6),
+        axis.title.y = element_blank(), 
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        strip.text.x = element_text(size = 6))+
+  #ggtitle("for formatting")+
+  facet_grid(~factor(outcome, c("Any parasite", "aEPEC", "tEPEC", "EIEC/Shigella", "Campylobacter", "Adenovirus", "Enterovirus", "Rotavirus", "Giardia")))+
+  coord_cartesian(xlim=c(0.2,4))+
+  #theme(plot.margin = unit(c(0,0.1,0,-0.5),"cm"))+
+  scale_x_continuous(trans="log", breaks = c(0.4, 1, 2.6))+
+  geom_text(aes(label=p_value_table), 
+            color="red",
+            position=position_dodge(width=0.5),
+            hjust=-0.05)
+
+forestplot_test
+
+ggsave("Figures/Figure S2/forestplot_SI_20240614.jpg", plot=forestplot_test, height = 6.5, width = 7.5)
+```
+
+#Table S7 (need to format in excel) MVM vif table & covars included
+```{r}
+MVM_most_vif <- readRDS("Export_files/MVM results_vif_individual exposures_most exposures_20240614.rds")
+MVM_jmp_vif <- readRDS("Export_files/MVM results_vif_individual exposures_jmp_20240614.rds")
+#MVM_piped_cait_vif <- readRDS("Export_files/MVM results_vif_individual exposures_piped_cait_20240614.rds")
+MVM_toilet_vif <- readRDS("Export_files/MVM results_vif_individual exposures_toilet_20240614.rds")
+
+MVM_vif <- rbind(MVM_most_vif, MVM_jmp_vif, MVM_toilet_vif)%>%
+  subset(var != "male")%>%
+  subset(var != "excl_bf")%>%
+  subset(var != "hhwealthquart")%>%
+  subset(var != "momedu_cat")%>%
+  subset(var != "vacc4m")%>%
+  subset(var != "age_day")%>%
+  subset(var != "momage")%>%
+  subset(var != "birthorder")%>%
+  subset(var != "hfiacat")%>%
+  subset(var != "m_eth_afro")%>%
+  subset(var != "vagbirth")%>%
+  subset(var != "imp_water_cait")%>%
+  subset(var != "imp_water_piped")%>%
+  subset(exposure != "imp_water_cait")%>%
+  subset(exposure != "imp_water_piped")
+  
+options(scipen=999)
+
+vif.out <- pivot_wider(MVM_vif, values_from = vif, names_from = outcome)%>%
+  kbl(digits=2)%>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
+vif.out
+
+#estimate table
+MVM_most <- readRDS("Export_files/MVM results_individual exposures_most exposures_20240614.rds")%>%
+  select(outcome, exposure, level, estimate, adjusted)
+MVM_jmp <- readRDS("Export_files/MVM results_individual exposures_jmp_20240614.rds")%>%
+  select(outcome, exposure, level, estimate, adjusted)
+# MVM_piped_cait <- readRDS("Export_files/MVM results_individual exposures_piped_cait_20240614.rds")%>%
+#   select(outcome, exposure, level, estimate, adjusted)
+MVM_toilet <- readRDS("Export_files/MVM results_individual exposures_toilet_20240614.rds")%>%
+  select(outcome, exposure, level, estimate, adjusted)
+
+MVM_estimate <- rbind(MVM_most, MVM_jmp, MVM_toilet)%>%
+  subset(adjusted == "Adjusted")%>%
+  select(outcome, exposure, level, estimate)%>%
+  subset(exposure != "imp_water_cait")%>%
+  subset(exposure != "imp_water_piped")%>%
+  subset(outcome != "Sapovirus")
+
+MVM_estimate$exposure <- paste(MVM_estimate$exposure, MVM_estimate$level, sep="_")
+
+MVM_estimate<- MVM_estimate%>%
+  select(outcome, exposure, estimate)
+  
+options(scipen=999)
+
+MVM_estimate.out <- pivot_wider(MVM_estimate, values_from = estimate, names_from = outcome)%>%
+  kbl(digits=2)%>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
+MVM_estimate.out
+
+#covars
+
+MVM_most_covars <- readRDS("Export_files/MVM covariates used_individual exposures_most exposures_20240614.rds")
+MVM_jmp_covars <- readRDS("Export_files/MVM covariates used_individual exposures_jmp_20240614.rds")
+#MVM_piped_cait_covars <- readRDS("Export_files/MVM covariates used_individual exposures_piped_cait_20240614.rds")
+MVM_toilet_covars <- readRDS("Export_files/MVM covariates used_individual exposures_toilet_20240614.rds")
+
+MVM_covars <- rbind(MVM_most_covars, MVM_jmp_covars, MVM_toilet_covars)
+
+MVM_covars2 <- MVM_covars%>%
+  mutate(Asset_score = case_when(grepl("hhwealthquart",covariates) ~ "x"),
+         Maternal_ethnicity = case_when(grepl("m_eth_afro",covariates) ~ "x"),
+         Maternal_age = case_when(grepl("momage",covariates) ~ "x"),
+         Birth_order = case_when(grepl("birthorder",covariates) ~ "x"),
+         Maternal_education = case_when(grepl("momedu_cat",covariates) ~ "x"),
+         Child_sex = case_when(grepl("male",covariates) ~ "x"),
+         Child_age = case_when(grepl("age_day",covariates) ~ "x"),
+         Type_of_birth = case_when(grepl("vagbirth",covariates) ~ "x"),
+         Community_type = case_when(grepl("comm_type",covariates) ~ "x"),
+         Breastfeeding_at_6_months = case_when(grepl("excl_bf",covariates) ~ "x"),
+         Food_security = case_when(grepl("hfiacat",covariates) ~ "x"),
+         Season = case_when(grepl("rainy",covariates) ~ "x"),
+         month_vaccines_received = case_when(grepl("vacc4m",covariates) ~ "x"))%>%
+  select(-covariates)%>%
+  mutate(exposure_num = case_when(grepl("hhcrowd", exposure) ~ 1,
+                                  grepl("imp_floors", exposure) ~ 2,
+                                  grepl("comm_type", exposure) ~ 3,
+                                  grepl("animal_score", exposure) ~ 4,
+                                  grepl("imp_toilet", exposure) ~ 5,
+                                  grepl("imp_water_jmp", exposure) ~ 6,
+                                  grepl("wat_detect", exposure) ~ 7,
+                                  grepl("storewat", exposure) ~ 8,
+                                  grepl("mhand_detect", exposure) ~ 9,
+                                  grepl("chand_detect", exposure) ~ 10,
+                                  grepl("hygiene", exposure) ~ 11,
+                                  grepl("rainy", exposure) ~ 12))%>%
+  mutate(outcome_num = case_when(grepl("anyinfection", outcome) ~ 1,
+         grepl("coinfection", outcome) ~ 2,
+         grepl("numpathogens", outcome) ~ 3,
+         grepl("anybacteria", outcome) ~ 4,
+         grepl("EAEC", outcome) ~ 5,
+         grepl("DAEC", outcome) ~ 6,
+         grepl("aEPEC", outcome) ~ 7,
+         grepl("tEPEC", outcome) ~ 8,
+         grepl("ETEC", outcome) ~ 9,
+         grepl("EIEC_or_Shigella", outcome) ~ 10,
+         grepl("Salmonella", outcome) ~ 11,
+         grepl("Campylobacter", outcome) ~ 12,
+         grepl("anyvirus", outcome) ~ 13,
+         grepl("Astrovirus", outcome) ~ 14,
+         grepl("Adenovirus", outcome) ~ 15,
+         grepl("Enterovirus", outcome) ~ 16,
+         grepl("Norovirus", outcome) ~ 17,
+         grepl("Rotavirus", outcome) ~ 18,
+         grepl("anyparasite", outcome) ~ 19,
+         grepl("Giardia_18S", outcome) ~ 20))
+
+write.csv(MVM_covars2, "Figures/Table S7/MVM_covars2_table_20240614.csv")
+
+```
+
+#Table S8 (need to format in excel)
+```{r}
+outcomes <- c("anyinfection", "coinfection", "numpathogens", "anyvirus", 
+               "anybacteria", 
+               "anyparasite", 
+               "Enterovirus", #111
+               "Giardia_18S", #15
+               "Rotavirus", #15
+               "Astrovirus",
+               "Adenovirus", #45
+               "Norovirus", #20
+               "Salmonella", #25
+               "Campylobacter", #38
+               "EAEC", #171
+               "DAEC", #85
+               "tEPEC", #21
+               "aEPEC", #78
+               "ETEC", #47
+               "EIEC_or_Shigella") #14
+
+MVM_most <- readRDS("Export_files/MVM results_individual exposures_most exposures_20240614.rds")
+MVM_jmp <- readRDS("Export_files/MVM results_individual exposures_jmp_20240614.rds")
+MVM_toilet <- readRDS("Export_files/MVM results_individual exposures_toilet_20240614.rds")
+
+MVM_results <- rbind(MVM_most, MVM_jmp, MVM_toilet)
+  
+table <- MVM_results %>%
+  mutate(p.value = ifelse(is.na(estimate) | (conf.low == 0 & conf.high == 0), NA, p.value),
+         estimate = ifelse(conf.low == 0 & conf.high == 0, NA, format(round(estimate,2))),
+         conf.low = ifelse(conf.low == 0 & conf.high == 0, NA, format(round(conf.low,2))),
+         conf.high = ifelse(conf.low == 0 & conf.high == 0, NA, format(round(conf.high,2)))) %>%
+  mutate(stars = case_when(#p.value <0.001 ~ "***",
+                           #p.value < 0.05 ~ "**",
+                           p.value < 0.05 ~ "*",
+                           TRUE ~ ""),
+         estimate = paste0(estimate, " (",conf.low, ", ", conf.high, ")", stars)) %>%
+  select(outcome, exposure, level, estimate, adjusted, p.value, FDR_p.value)%>%
+  tidyr::pivot_wider(names_from = "adjusted", values_from = c("estimate", "FDR_p.value"))%>%
+  dplyr::rename(Unadjusted = estimate_Unadjusted)%>%
+  dplyr::rename(Adjusted = estimate_Adjusted)%>%
+  dplyr::rename(FDR_p.value = FDR_p.value_Adjusted)%>%
+  select(outcome, exposure, level, Unadjusted, Adjusted, p.value, FDR_p.value)
+
+table_adjusted <- table%>%
+  select(outcome, exposure, level, Adjusted, p.value, FDR_p.value)%>%
+  subset(!is.na(Adjusted))
+
+table_unadjusted <- table%>%
+  select(outcome, exposure, level, Unadjusted)%>%
+  subset(!is.na(Unadjusted))
+
+table_merge <- table_unadjusted%>%
+  full_join(table_adjusted, by=c("outcome", "exposure", "level"))%>%
+  mutate(exposure = fct_relevel(exposure, "hhcrowd", "imp_floors", "comm_type", "animal_score", "imp_toilet", "imp_water_jmp", "storewat", "wat_detect", "mhand_detect", "chand_detect", "hygiene", "rainy"))
+
+table_wide <- pivot_wider(table_merge, names_from = outcome, values_from = c(Unadjusted, Adjusted, p.value, FDR_p.value))%>%
+  select(exposure, level, Unadjusted_anyinfection, Adjusted_anyinfection, p.value_anyinfection, FDR_p.value_anyinfection,
+         Unadjusted_coinfection, Adjusted_coinfection, p.value_coinfection, FDR_p.value_coinfection,
+         Unadjusted_numpathogens, Adjusted_numpathogens, p.value_numpathogens, FDR_p.value_numpathogens,
+         Unadjusted_anybacteria, Adjusted_anybacteria, p.value_anybacteria, FDR_p.value_anybacteria,
+         Unadjusted_anyvirus, Adjusted_anyvirus, p.value_anyvirus, FDR_p.value_anyvirus,
+         Unadjusted_anyparasite, Adjusted_anyparasite, p.value_anyparasite, FDR_p.value_anyparasite,
+         Unadjusted_EAEC, Adjusted_EAEC, p.value_EAEC, FDR_p.value_EAEC,
+         Unadjusted_DAEC, Adjusted_DAEC, p.value_DAEC, FDR_p.value_DAEC,
+         Unadjusted_aEPEC, Adjusted_aEPEC, p.value_aEPEC, FDR_p.value_aEPEC,
+         Unadjusted_tEPEC, Adjusted_tEPEC, p.value_tEPEC, FDR_p.value_tEPEC,
+         Unadjusted_ETEC, Adjusted_ETEC, p.value_ETEC, FDR_p.value_ETEC,
+         Unadjusted_EIEC_or_Shigella, Adjusted_EIEC_or_Shigella, p.value_EIEC_or_Shigella, FDR_p.value_EIEC_or_Shigella,
+         Unadjusted_Campylobacter, Adjusted_Campylobacter, p.value_Campylobacter, FDR_p.value_Campylobacter,
+         Unadjusted_Salmonella, Adjusted_Salmonella, p.value_Salmonella, FDR_p.value_Salmonella,
+         Unadjusted_Astrovirus, Adjusted_Astrovirus, p.value_Astrovirus, FDR_p.value_Astrovirus,
+         Unadjusted_Adenovirus, Adjusted_Adenovirus, p.value_Adenovirus, FDR_p.value_Adenovirus,
+         Unadjusted_Enterovirus, Adjusted_Enterovirus, p.value_Enterovirus, FDR_p.value_Enterovirus,
+         Unadjusted_Norovirus, Adjusted_Norovirus, p.value_Norovirus, FDR_p.value_Norovirus,
+         Unadjusted_Rotavirus, Adjusted_Rotavirus, p.value_Rotavirus, FDR_p.value_Rotavirus,
+         Unadjusted_Giardia_18S, Adjusted_Giardia_18S, p.value_Giardia_18S, FDR_p.value_Giardia_18S)
+
+write.csv(table_wide, "Figures/Table S8/MVM_results_table_20240614.csv")
+
+```
+
+#Table S9 (need to reformat in docx)
+```{r}
+d <- readRDS("Export_files/6mo analysis data.rds") 
+
+
+d <- d %>%
+  select(-anyvirus) %>%
+  dplyr::rename(comm_type = Community.Type,
+         animal_score = animal_score_overall_child,
+         vacc4m = four_month_vaccines,
+         vacc6m = six_month_vaccines,
+         age_day = age_in_days,
+         anyinfection = Any_infection_noCOVID,
+         coinfection = Any_co_infection_noCOVID,
+         anyvirus = Any_virus_noCOVID,
+         numpathogens = Any_infection_noCOVID_number) %>%
+  mutate(comm_type = factor(comm_type, 
+                            levels = c("urban", "semi-urban",
+                                       "rural - road", "rural - river"),
+                            labels = c("Urban", "Semi-urban",
+                                       "Rural (road)", "Rural (river)")))
+
+#select exposures of interest
+exposures <- c("comm_type", "rainy", "imp_floors", "floors","imp_toilet", "toilet_type","imp_water_jmp", "water_jmp",
+               "hygiene", "animal_score", "wat_detect",
+               "mhand_detect", "chand_detect", "storewat", 
+               "hhcrowd")
+
+#select covariates for all models
+covariates <- c("age_day", "male",  "hhwealth", 
+                "momedu_cat",  "momage",
+                "birthorder","m_eth_afro", "excl_bf", "hfiacat", "vacc4m", "vagbirth")
+
+domain_ordered <- c("hhwealth", "m_eth_afro", "hhcrowd", "imp_floors", "floors","momage", "birthorder", "momedu_cat", "male", "age_day", "vagbirth", "comm_type", "animal_score", "imp_toilet", "toilet_type","imp_water_jmp", "water_jmp","storewat", "wat_detect", "mhand_detect", "chand_detect", "hygiene", "excl_bf", "hfiacat", "rainy", "vacc4m")
+
+table1 <- d %>%
+  select(all_of(domain_ordered)) %>%
+  mutate(hhwealth = cut(hhwealth, breaks = quantile(d$hhwealth, probs = seq(0,1,0.25)),
+                      include.lowest = T, right = T, labels = c(1:4))) %>%
+  tbl_summary(by = comm_type,
+              type = list(all_continuous() ~ "continuous2",
+                          #numpathogens ~ "continuous2",
+                          hygiene ~ "continuous2"),
+              statistic = all_continuous() ~ c("{median} ({p25}, {p75})", "{min}, {max}"),
+              missing_text = "Missing",
+              label = list(hhwealth ~ "SES",
+                           momedu_cat ~ "Years of maternal education",
+                            male ~ "Sex (male)",
+                            age_day ~ "Age in days (at stool collection timepoint)",
+                            vagbirth ~ "Type of birth (vaginal)",
+                            animal_score ~ "Animal exposure score",
+                            imp_toilet ~ "Improved toilet",
+                            wat_detect ~ "E.coli detected in water",
+                            imp_water_jmp ~ "Improved water",
+                            mhand_detect ~ "E.coli detected in maternal handwash",
+                            chand_detect ~ "E.coli detection in child handwash",
+                            hygiene ~ "Hygiene score",
+                            hfiacat ~ "Household food security",
+                            rainy ~ "Season (rainy)",
+                            vacc4m ~ "Completed 4-month vaccines",
+                            #vacc6m ~ "Completed 6-month vaccines",
+                            excl_bf ~ "Breastfeeding at 6 months (exclusive/predominant)",
+                           hhcrowd ~ "Household crowding",
+                           imp_floors ~ "Improved flooring",
+                           storewat ~ "Household stores water",
+                           momedu_cat ~ "Maternal education",
+                           momage ~ "Maternal age",
+                           birthorder ~ "Birth order",
+                           m_eth_afro ~ "Maternal ethnicity is Afro-Ecuadorian"),
+              digits = list(#numpathogens ~ 0,
+                            hygiene ~ 0)) %>%
+  add_overall() %>%
+  #modify_caption("Descriptive statistics") %>%
+  modify_header(label ~ "**Variable**")
+
+table1 <- table1 %>%
+  as_flex_table() 
+
+# flextable::save_as_docx(table1, path = "~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/CH tables figs/descriptive table.docx")
+flextable::save_as_docx(table1, path = "Figures/Table S9/descriptive table for SI_NAZ_20240614.docx")
+```
+
+#Table S10 (format in excel)
+```{r}
+vi_scores <- readRDS("Export_files/vi_scores_20240614.rds") 
+
+vi_scores_outcomes_table <- vi_scores %>% 
+  mutate(Importance = ifelse(Sign == "NEG", Importance*-1, Importance),
+         Sign = ifelse(Sign == "NEG", "Negative", "Positive"),
+         newvar = case_when(Variable == "hhcrowd" ~ "Household crowding",
+                            Variable == "animal_score" ~ "Animal score",
+                            Variable == "wat_detect" ~ "E. coli in drinking water",
+                            Variable == "hygiene" ~ "Hygiene score",
+                            Variable == "vacc4m" ~ "4 month vaccines completed",
+                            Variable == "vacc6m" ~ "6 month vaccines completed",
+                            Variable == "mhand_detect" ~ "E. coli in maternal handwash",
+                            Variable == "chand_detect" ~ "E. coli in child handwash",
+                            Variable == "rainy" ~ "Season (rainy)",
+                            Variable == "storewat" ~ "Water stored",
+                            Variable == "vagbirth" ~ "Vaginal birth",
+                            Variable == "imp_toilet" ~ "Improved toilet",
+                            Variable == "imp_floors" ~ "Improved floors",
+                      Variable == "imp_water_jmp" ~ "Improved water",
+                            Variable == "urban" ~ "Urban",
+                            Variable == "semiurban" ~ "Semi-urban",
+                            Variable == "ruralroad" ~ "Rural (road)",
+                            Variable == "ruralriver" ~ "Rural (river)"))%>%
+  # subset(outcome == "anyinfection" | outcome == "coinfection" | outcome == "numpathogens" | outcome == "anybacteria" | outcome == "anyvirus" | outcome == "EAEC"  | outcome == "DAEC" | outcome == "ETEC" | outcome == "Campylobacter" | outcome == "Enterovirus" | outcome == "Rotavirus" | outcome == "Adenovirus" | outcome == "Norovirus" | outcome == "Giardia_18S")%>%
+mutate(outcome = case_when(outcome == "anyinfection" ~ "Any infection",
+                             outcome == "coinfection" ~ "Co-infection",
+                             outcome == "numpathogens" ~ "Pathogen no.",
+                             outcome == "anybacteria" ~ "Any bacteria",
+                             outcome == "anyvirus" ~ "Any virus",
+                             outcome == "anyparasite" ~ "Any parasite",
+                           outcome == "EIEC_or_Shigella" ~ "EIEC/Shigella",
+                           
+                             outcome == "Giardia_18S" ~ "Giardia",
+                             TRUE ~ outcome))
+
+write.csv(vi_scores_outcomes_table, "Figures/Table S10/vi_scores_outcomes_table_20240614.csv")
+
+```

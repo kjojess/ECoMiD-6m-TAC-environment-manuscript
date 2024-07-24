@@ -1,0 +1,646 @@
+---
+title: "6m TAC NMDS"
+author: "Kelsey Jesser"
+date: "2/11/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+#clear R env
+```{r include=FALSE}
+rm(list = ls())
+```
+
+#load libraries
+```{r}
+library(dplyr)
+library(vegan)
+library(tidyverse)
+library(gtsummary)
+library(reshape2)
+library(knitr)
+library(cowplot)
+```
+
+#import and summarize data
+```{r}
+key<-read.csv("C:/Users/kelse/OneDrive - UW/ECoMiD/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Export_files/Key for 6mo analysis data.csv")
+
+d<-readRDS("C:/Users/kelse/OneDrive - UW/ECoMiD/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Export_files/6mo analysis data.rds")
+
+d <- d %>%
+  select(-anyvirus) %>%
+  dplyr::rename(comm_type = Community.Type,
+         animal_score = animal_score_overall_child,
+         vacc4m = four_month_vaccines,
+         vacc6m = six_month_vaccines,
+         age_day = age_in_days,
+         anyinfection = Any_infection_noCOVID,
+         coinfection = Any_co_infection_noCOVID,
+         anyvirus = Any_virus_noCOVID,
+         numpathogens = Any_infection_noCOVID_number)
+
+#select exposures of interest
+exposures <- c("hhcrowd", "floors","comm_type", "animal_score", "toilet_type", "imp_water","wat_detect","hygiene", "vacc4m", "vacc6m", "mhand_detect", "chand_detect", "rainy", "storewat", "vagbirth", "age_day", "male", "excl_bf", "hhwealth", "momedu_cat",  "momage","birthorder", "hfiacat", "m_eth_afro")
+
+#select pathogens
+pathogens<-c("Salmonella", "Campylobacter", "EAEC", "DAEC", "tEPEC", "aEPEC", "ETEC", "EIEC_or_Shigella", "EHEC", "STEC", "Ascaris", "Cyclospora_cayetanesis", "Entamoeba", "Giardia_18S", "Trichuris", "Cryptosporidium", "Astrovirus", "Enterovirus", "Rotavirus", "Sapovirus", "Adenovirus", "Norovirus")
+
+
+#select outcomes
+outcomes <- c("anyinfection", "coinfection", "numpathogens", "anyvirus", 
+              "anybacteria", "anyparasite", "zoonotic")
+
+d %>%
+  select(all_of(outcomes), all_of(exposures), all_of(pathogens)) %>%
+  mutate(hhwealth = cut(hhwealth, breaks = quantile(d$hhwealth, probs = seq(0,1,0.25)),
+include.lowest = T, right = T, labels = c(1:4))) %>%
+  tbl_summary(by = comm_type,
+              type = list(all_continuous() ~ "continuous2",
+    numpathogens ~ "continuous2",
+    hygiene ~ "continuous2"),
+              statistic = all_continuous() ~ c("{median} ({p25}, {p75})", "{min}, {max}"),
+              missing_text = "Missing",
+              label = list(hhwealth ~ "Household asset index quartile",
+     momedu_cat ~ "Years of maternal education",
+      male ~ "Male",
+      age_day ~ "Age in days (at stool collection timepoint)",
+      vagbirth ~ "Vaginal mode of birth",
+      #comm_type ~ "Community", 
+      animal_score ~ "Animal exposure score",
+      toilet_type ~ "Toilet type",
+      wat_detect ~ "E.coli detected in drinking water source",
+      imp_water ~ "Water type",
+      mhand_detect ~ "E.coli detected on caregiver two hands",
+      chand_detect ~ "E.coli detection on child two hands",
+      hygiene ~ "Hygiene score",
+      hfiacat ~ "Household food security",
+      rainy ~ "Rainy season",
+      vacc4m ~ "Completed 4-month vaccines",
+      vacc6m ~ "Completed 6-month vaccines",
+      excl_bf ~ "Was exclusively breastfed",
+     anyinfection ~ "Any pathogen",
+      anybacteria ~ "Any bacterial pathogen",
+      anyvirus ~ "Any viral pathogen",     
+      anyparasite ~ "Any parasitic pathogen",   
+      zoonotic ~ "Any zoonotic pathogen",     
+      coinfection ~ "Any co-infection",
+      numpathogens ~ "Number of pathogens",
+     hhcrowd ~ "Household crowding",
+     floors ~ "Floor type",
+     storewat ~ "Household stores water",
+     momedu_cat ~ "Maternal education",
+     momage ~ "Maternal age",
+     birthorder ~ "Birth order",
+     m_eth_afro ~ "Mom is afro-ecuadorian")) %>%
+  add_overall() %>%
+  modify_caption("Descriptive statistics") %>%
+  modify_header(label ~ "**Variable**")
+```
+
+#filter uninfected kids
+```{r}
+#remove samples with no infection data 
+d_filt<-d%>%
+  dplyr::rowwise()%>%
+  filter(!all(c(Salmonella, Campylobacter, EAEC, DAEC, tEPEC, aEPEC, ETEC, EIEC_or_Shigella, EHEC, STEC, Ascaris, Cyclospora_cayetanesis, Entamoeba, Giardia_18S, Trichuris, Cryptosporidium, Astrovirus, Enterovirus, Rotavirus, Sapovirus, Adenovirus, Norovirus) == 0))%>%
+  unique()
+
+d_filt %>%
+  select(all_of(outcomes), all_of(exposures), all_of(pathogens)) %>%
+  mutate(hhwealth = cut(hhwealth, breaks = quantile(d$hhwealth, probs = seq(0,1,0.25)),
+include.lowest = T, right = T, labels = c(1:4))) %>%
+  tbl_summary(by = comm_type,
+              type = list(all_continuous() ~ "continuous2",
+    numpathogens ~ "continuous2",
+    hygiene ~ "continuous2"),
+              statistic = all_continuous() ~ c("{median} ({p25}, {p75})", "{min}, {max}"),
+              missing_text = "Missing",
+              label = list(hhwealth ~ "Household asset index quartile",
+     momedu_cat ~ "Years of maternal education",
+      male ~ "Male",
+      age_day ~ "Age in days (at stool collection timepoint)",
+      vagbirth ~ "Vaginal mode of birth",
+      #comm_type ~ "Community", 
+      animal_score ~ "Animal exposure score",
+      toilet_type ~ "Toilet type",
+      wat_detect ~ "E.coli detected in drinking water source",
+      imp_water ~ "Water type",
+      mhand_detect ~ "E.coli detected on caregiver two hands",
+      chand_detect ~ "E.coli detection on child two hands",
+      hygiene ~ "Hygiene score",
+      hfiacat ~ "Household food security",
+      rainy ~ "Rainy season",
+      vacc4m ~ "Completed 4-month vaccines",
+      vacc6m ~ "Completed 6-month vaccines",
+      excl_bf ~ "Was exclusively breastfed",
+     anyinfection ~ "Any pathogen",
+      anybacteria ~ "Any bacterial pathogen",
+      anyvirus ~ "Any viral pathogen",     
+      anyparasite ~ "Any parasitic pathogen",   
+      zoonotic ~ "Any zoonotic pathogen",     
+      coinfection ~ "Any co-infection",
+      numpathogens ~ "Number of pathogens",
+     hhcrowd ~ "Household crowding",
+     floors ~ "Floor type",
+     storewat ~ "Household stores water",
+     momedu_cat ~ "Maternal education",
+     momage ~ "Maternal age",
+     birthorder ~ "Birth order",
+     m_eth_afro ~ "Mom is afro-ecuadorian")) %>%
+  add_overall() %>%
+  modify_caption("Descriptive statistics") %>%
+  modify_header(label ~ "**Variable**")
+```
+
+#subset data for PA analyses
+```{r}
+#metadata
+meta1<-d_filt%>%
+  select(one_of(exposures), !!c("house_ID"))%>%
+  column_to_rownames("house_ID")%>%
+  #na.omit()%>%
+  mutate_all(~ ifelse(is.na(.), "missing", .))
+
+meta2<-d_filt%>%
+  select(one_of(exposures), !!c("house_ID"))%>%
+  column_to_rownames("house_ID")%>%
+  #na.omit()%>%
+  mutate_all(~ ifelse(is.na(.), "missing", .))%>%
+  mutate(present=1)%>%
+  pivot_wider(names_from=floors, values_from=present, values_fill=0)%>%
+  mutate(present=1)%>%
+  pivot_wider(names_from=hfiacat, values_from=present, values_fill=0)%>%
+  mutate_all(as.numeric)
+
+exposures_test<-c("house_ID", "hhcrowd", "animal_score", "hygiene", "mhand_detect", "chand_detect", "wat_detect", "rainy", "storewat", "imp_toilet", "imp_floors", "comm_type", "imp_water" )
+#cat<-c("toilet_type", "floors", "comm_type", "water_type")
+cat<-c("comm_type")
+
+# meta3<-d_filt%>%
+#   select(one_of(exposures_test))%>%
+#   mutate(imp_toilet = case_when(toilet_type %in% c("Unshared toilet attached to septic tank",
+#        "Unshared toilet attached to sewer system",
+#        "Unshared toilet/improved latrine that stays onsite") ~ 1,
+#           toilet_type %in% c("Limited", "Unimproved/Open") ~ 0),
+#          imp_floors = case_when(floors %in% c("Cement", "Ceramic tiles") ~ 1,
+#           floors %in% c("Earth/sand/palm/bamboo", "Wooden boards", "Other") ~ 0),
+#          imp_water = case_when(water_type %in% c("Bottled/tank/filtered/boiled", "Piped water connection",
+#      "Protected/tubewell", "Public tap") ~ 1,
+#          water_type %in% c("Rain water", "Unprotected well/Surface water") ~ 0)) %>%
+#   select(-toilet_type, -floors, -water_type)
+
+meta3<-d_filt%>%
+  select(one_of(exposures_test))
+
+meta4<-fastDummies:: dummy_cols(meta3, select_columns = cat,
+             #remove original categorical variables
+             remove_selected_columns = T,
+             #keep all dummies (vs. drop one)
+             remove_most_frequent_dummy = F,
+             #ignore missing vars since we performed CC
+             ignore_na = T) %>%
+  #rename variables that had spaces in values
+  dplyr::rename(urban = `comm_type_urban`,
+         semiurban = `comm_type_semi-urban`,
+         ruralroad = `comm_type_rural - road`,
+         ruralriver = `comm_type_rural - river`)%>%
+  column_to_rownames("house_ID")
+
+
+#PA TAC data
+Pathogens<-d_filt%>%
+  select(one_of(pathogens), !!c("house_ID"))%>%
+  column_to_rownames("house_ID")%>%
+  as.matrix()#no SARS-COV2
+
+Bacteria<-d_filt%>%
+  select(c("house_ID", "Salmonella", "Campylobacter", "EAEC", "DAEC", "tEPEC","aEPEC", "ETEC", "EIEC_or_Shigella", "EHEC","STEC"))%>%
+  column_to_rownames("house_ID")%>%
+  filter(rowSums(.) != 0)%>%
+  as.matrix()
+
+Viruses<-d_filt%>%
+  select(c("house_ID", "Astrovirus", "Enterovirus", "Rotavirus", "Sapovirus", "Adenovirus", "Norovirus"))%>%
+  column_to_rownames("house_ID")%>%
+  filter(rowSums(.) != 0)%>%
+  as.matrix()
+
+Parasites<-d_filt%>%
+  select(c("house_ID", "Ascaris", "Cyclospora_cayetanesis", "Entamoeba", "Giardia_18S", "Trichuris", "Cryptosporidium"))%>%
+  column_to_rownames("house_ID")%>%
+  filter(rowSums(.) != 0)%>%
+  as.matrix()
+#only n=21 samples with parasite infections; won't conduct additional analyses due to small sample numbers
+
+DEC<-d_filt%>%
+  select(c("house_ID", "EAEC", "DAEC", "tEPEC","aEPEC", "ETEC", "EIEC_or_Shigella", "EHEC","STEC"))%>%
+  column_to_rownames("house_ID")%>%
+  filter(rowSums(.) != 0)%>%
+  as.matrix()
+  
+```
+
+#plot metadata correlation matrix
+```{r}
+meta4.5<-meta4%>%
+  na.omit()%>%
+  mutate_all(as.numeric)%>%
+  dplyr::rename(`Household crowding`=hhcrowd,
+         `Animal score`=animal_score,
+         `Rural (road)`=ruralroad,
+         `Rural (river)`=ruralriver,
+         `Intermediate`=semiurban,
+         `Urban`=urban, 
+         `Improved toilet`=imp_toilet,
+         `Improved floors`=imp_floors,
+         `Improved water`=imp_water,
+         `E. coli in maternal handwash`=mhand_detect,
+         `E. coli in child handwash`=chand_detect,
+         `E. coli in drinking water`=wat_detect,
+         `Season (rainy)`=rainy, 
+         `Hygiene score`=hygiene,
+         `Water stored`= storewat)
+ 
+cor_matrix <- cor(meta4.5, method = "pearson", use = "complete.obs")
+
+# Calculate p-values for the correlations
+cor_pval <- function(data) {
+  n <- ncol(data)
+  p_matrix <- matrix(NA, n, n)
+  dimnames(p_matrix) <- list(colnames(data), colnames(data))
+  for (i in 1:(n-1)) {
+    for (j in (i+1):n) {
+      test <- cor.test(data[[i]], data[[j]], method = "pearson")
+      p_matrix[i, j] <- test$p.value
+      p_matrix[j, i] <- test$p.value
+    }
+  }
+  diag(p_matrix) <- 1
+  return(p_matrix)
+}
+
+p_matrix <- cor_pval(meta4.5)
+
+get_lower_tri <- function(mat) {
+  mat[upper.tri(mat)] <- NA
+  return(mat)
+}
+
+cor_matrix[upper.tri(cor_matrix)] <- NA
+melted_cor_matrix <- melt(cor_matrix, na.rm = TRUE)
+melted_p_matrix <- melt(get_lower_tri(p_matrix), na.rm = TRUE)
+
+plot_data <- merge(melted_cor_matrix, melted_p_matrix, by = c("Var1", "Var2"))
+colnames(plot_data) <- c("Variable1", "Variable2", "Correlation", "P.Value")
+
+block_out_pairs <- list(
+  c("Intermediate", "Urban"),
+  c("Intermediate", "Rural (road)"),
+  c("Intermediate", "Rural (river)"),
+  c("Urban", "Rural (road)"),
+  c("Urban", "Rural (river)"),
+  c("Rural (river)", "Rural (road)")
+)
+
+is_blocked_out <- function(var1, var2) {
+  return(any(sapply(block_out_pairs, function(pair) {
+    (pair[1] == var1 && pair[2] == var2) || (pair[1] == var2 && pair[2] == var1)
+  })))
+}
+
+plot_data$BlockOut <- mapply(is_blocked_out, plot_data$Variable1, plot_data$Variable2)
+
+corplot <- ggplot(data = plot_data, aes(x = Variable1, y = Variable2)) +
+  geom_tile(aes(fill = ifelse(BlockOut, NA, Correlation)), color = "white") +
+  geom_text(aes(label = ifelse(!BlockOut, ifelse(P.Value < 0.05, sprintf("%.2f*", Correlation), sprintf("%.2f", Correlation)), "")), color = "black", size = 2.25) +
+  scale_fill_gradient2(low = "yellow", high = "#482878", mid = "white", midpoint = 0, limit = c(-1, 1), na.value = "white") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, color = "black"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_text(color = "black")) +
+  labs(fill = "Correlation Coefficient") +
+  coord_fixed()
+
+corplot
+ggsave(filename="C:/Users/kelse/OneDrive - UW/ECoMiD/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Figures/Figure S1/corplot.png", plot=corplot, device="png", width=8, height=6, dpi=600)
+```
+
+#fitted NMDS: all pathogens
+```{r}
+set.seed(12345)
+
+meta5<-meta4%>%
+  na.omit()
+
+rownames<-row.names(Pathogens) %in% row.names(meta5)
+Pathogens_na<- Pathogens[rownames, ] 
+
+nmds_path<- metaMDS(Pathogens_na, distance="jaccard")
+plot(nmds_path)
+#remove outlier and re-run
+NMDS1_values<-nmds_path$points #identify sample (from house_ID 2016, one of only two samples with trichuris infection and has no coinfection (other trichuris+ sample has a coinfection))
+
+outlier<-c("2016")
+Pathogens_na_out<- Pathogens_na[rownames(Pathogens_na) != outlier, , drop=FALSE]
+
+nmds_path2<- metaMDS(Pathogens_na_out, distance="jaccard")
+plot(nmds_path2)
+
+#with categorical community variable
+meta6<-meta3%>%
+    column_to_rownames("house_ID")%>%
+    na.omit()%>%
+    filter(row.names(.) !=c("2016"))
+
+en_path_cat<- envfit(nmds_path2, meta6, permutations=9999)
+en_path_cat
+
+#with dummy variables
+meta7<-meta5%>%
+   filter(row.names(.) !=c("2016"))
+
+en_path<- envfit(nmds_path2, meta7, permutations=9999)
+en_path
+plot(en_path)
+
+#adj p-values
+en_path_padj<-en_path
+en_path_padj$vectors$pvals <- p.adjust (en_path$vectors$pvals, method = 'BH')
+en_path_padj #no significant variables after adjusting for multiple testing
+
+
+#pretty plot with significant variables as vectors
+path_PA_scores<-scores(nmds_path, display="sites")%>%
+  as.data.frame()%>%
+  mutate(Sites=rownames(.))%>%
+  filter(row.names(.) !=c("2016"))
+
+path_PA_arrows<-en_path_padj$vectors$arrows%>%
+  cbind(pvals=en_path_padj$vectors$pvals)%>%
+  as.data.frame()%>%
+  rownames_to_column("Variable")%>%
+  filter(pvals<0.05)
+
+path_PA_nmds<-path_PA_scores%>%
+  cbind(meta6)%>%
+  ggplot(aes(x=NMDS1, y=NMDS2))+
+  geom_point(aes(color=factor(comm_type)))+
+  stat_ellipse(aes(color = factor(comm_type)), type="norm", geom="polygon", alpha=0, linetype=2) +
+  geom_segment(data=path_PA_arrows, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.02, "npc"), type = "closed"))+
+  geom_text(data = path_PA_arrows, aes(x = NMDS1 * 1.1, y = NMDS2 * 1.1, label = Variable), hjust = 1.1, vjust = 1) +
+  theme_bw()+
+  ggtitle("Any pathogen")
+
+path_PA_nmds
+```
+
+#fitted NMDS: all bacteria
+```{r}
+set.seed(12345)
+
+meta8<-meta4%>%
+  na.omit()
+
+common_row_names <- intersect(row.names(meta8), row.names(Bacteria))
+
+meta8<-meta8[common_row_names, ]
+Bacteria_na<- Bacteria[common_row_names, ]
+
+
+nmds_bact<- metaMDS(Bacteria_na, distance="jaccard")
+plot(nmds_bact)
+
+#with categorical community variable
+meta9<-meta3%>%
+column_to_rownames("house_ID")%>%
+na.omit()
+
+common_row_names <- intersect(row.names(meta9), row.names(Bacteria_na))
+
+meta9<-meta9[common_row_names, ]
+Bacteria_na<- Bacteria[common_row_names, ]
+
+
+en_bact_cat<- envfit(nmds_bact, meta9, permutations=9999)
+en_bact_cat
+
+#with dummy variables
+common_row_names <- intersect(row.names(meta5), row.names(Bacteria_na))
+
+meta10<-meta5[common_row_names, ]
+Bacteria_na<- Bacteria[common_row_names, ]
+   
+en_bact<- envfit(nmds_bact, meta10, permutations=9999)
+en_bact
+plot(en_bact)
+
+#adj p-values
+en_bact_padj<-en_bact
+en_bact_padj$vectors$pvals <- p.adjust (en_bact$vectors$pvals, method = 'BH')
+en_bact_padj #no significant variables after adjusting for multiple testing
+
+
+#nmds plot with significant variables as vectors
+bact_PA_scores<-vegan::scores(nmds_bact, display="sites")%>%
+  as.data.frame()%>%
+  dplyr::mutate(Sites=rownames(.))
+
+bact_PA_arrows<-en_bact_padj$vectors$arrows%>%
+  cbind(pvals=en_bact_padj$vectors$pvals)%>%
+  as.data.frame()%>%
+  rownames_to_column("Variable")%>%
+  filter(pvals<0.05)
+
+bact_PA_nmds<-bact_PA_scores%>%
+  cbind(meta9)%>%
+  ggplot(aes(x=NMDS1, y=NMDS2))+
+  geom_point(aes(color=(comm_type)))+
+  stat_ellipse(aes(color = (comm_type)), type="norm", geom="polygon", alpha=0, linetype=2) +
+  #geom_segment(data=bact_PA_arrows, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               #arrow = arrow(length = unit(0.02, "npc"), type = "closed"))+
+  #geom_text(data = bact_PA_arrows, aes(x = NMDS1 * 1.1, y = NMDS2 * 1.1, label = Variable), hjust = 1.1, vjust = 1) +
+  theme_bw()+
+  ggtitle("Bacteria")
+
+bact_PA_nmds
+```
+
+#fitted NMDS: all viruses
+```{r}
+set.seed(12345)
+
+meta11<-meta4%>%
+  na.omit()
+
+common_row_names <- intersect(row.names(meta11), row.names(Viruses))
+
+meta11<-meta11[common_row_names, ]
+Viruses_na<- Viruses[common_row_names, ]
+
+
+nmds_vir<- metaMDS(Viruses_na, distance="jaccard")
+plot(nmds_vir)
+
+#with categorical community variable
+meta12<-meta3%>%
+column_to_rownames("house_ID")%>%
+na.omit()
+
+common_row_names <- intersect(row.names(meta12), row.names(Viruses_na))
+
+meta12<-meta12[common_row_names, ]
+Viruses_na<- Viruses_na[common_row_names, ]
+
+en_vir_cat<- envfit(nmds_vir, meta12, permutations=9999)
+en_vir_cat
+
+#with dummy variables
+common_row_names <- intersect(row.names(meta5), row.names(Viruses_na))
+
+meta13<-meta5[common_row_names, ]
+Viruses_na<- Viruses_na[common_row_names, ]
+   
+en_vir<- envfit(nmds_vir, meta13, permutations=9999)
+en_vir
+plot(en_vir)
+
+#adj p-values
+en_vir_padj<-en_vir
+en_vir_padj$vectors$pvals <- p.adjust (en_vir$vectors$pvals, method = 'BH')
+en_vir_padj #no significant variables after adjusting for multiple testing
+
+#nmds plot with significant variables as vectors
+vir_PA_scores<-scores(nmds_vir, display="sites")%>%
+  as.data.frame()%>%
+  mutate(Sites=rownames(.))
+
+vir_PA_arrows<-en_vir_padj$vectors$arrows%>%
+  cbind(pvals=en_vir_padj$vectors$pvals)%>%
+  as.data.frame()%>%
+  rownames_to_column("Variable")%>%
+  filter(pvals<0.05)
+
+vir_PA_nmds<-vir_PA_scores%>%
+  cbind(meta12)%>%
+  ggplot(aes(x=NMDS1, y=NMDS2))+
+  geom_point(aes(color=factor(comm_type)))+
+  stat_ellipse(aes(color = (comm_type)), type="norm", geom="polygon", alpha=0, linetype=2) +
+  #geom_segment(data=bact_PA_arrows, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               #arrow = arrow(length = unit(0.02, "npc"), type = "closed"))+
+  #geom_text(data = bact_PA_arrows, aes(x = NMDS1 * 1.1, y = NMDS2 * 1.1, label = Variable), hjust = 1.1, vjust = 1) +
+   theme_bw()+
+  ggtitle("Viruses")
+
+vir_PA_nmds
+```
+
+#fitted NMDS: DEC
+```{r}
+set.seed(12345)
+
+meta14<-meta4%>%
+  na.omit()
+
+common_row_names <- intersect(row.names(meta14), row.names(DEC))
+
+meta14<-meta14[common_row_names, ]
+DEC_na<- DEC[common_row_names, ]
+
+nmds_DEC<- metaMDS(DEC_na, distance="jaccard")
+plot(nmds_DEC)
+
+#with categorical community variable
+meta15<-meta3%>%
+  column_to_rownames("house_ID")%>%
+  na.omit()
+
+common_row_names <- intersect(row.names(meta15), row.names(DEC_na))
+
+meta15<-meta15[common_row_names, ]
+DEC_na<- DEC_na[common_row_names, ]
+
+en_DEC_cat<- envfit(nmds_DEC, meta15, permutations=9999)
+en_DEC_cat
+
+#with dummy variables
+common_row_names <- intersect(row.names(meta5), row.names(DEC_na))
+
+meta16<-meta5[common_row_names, ]
+DEC_na<- DEC_na[common_row_names, ]
+   
+en_DEC<- envfit(nmds_DEC, meta16, permutations=9999)
+en_DEC
+plot(en_DEC)
+
+#adj p-values
+en_DEC_padj<-en_DEC
+en_DEC_padj$vectors$pvals <- p.adjust (en_DEC$vectors$pvals, method = 'BH')
+en_DEC_padj #no significant variables after adjusting for multiple testing
+
+#nmds plot with significant variables as vectors
+DEC_PA_scores<-scores(nmds_DEC, display="sites")%>%
+  as.data.frame()%>%
+  mutate(Sites=rownames(.))
+
+DEC_PA_arrows<-en_DEC$vectors$arrows%>%
+  cbind(pvals=en_DEC$vectors$pvals)%>%
+  as.data.frame()%>%
+  rownames_to_column("Variable")%>%
+  filter(pvals<0.05)
+
+DEC_PA_nmds<-DEC_PA_scores%>%
+  cbind(meta15)%>%
+  ggplot(aes(x=NMDS1, y=NMDS2))+
+  geom_point(aes(color=comm_type))+
+  stat_ellipse(aes(color = (comm_type)), type="norm", geom="polygon", alpha=0, linetype=2) +
+  #geom_segment(data=bact_PA_arrows, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               #arrow = arrow(length = unit(0.02, "npc"), type = "closed"))+
+  #geom_text(data = bact_PA_arrows, aes(x = NMDS1 * 1.1, y = NMDS2 * 1.1, label = Variable), hjust = 1.1, vjust = 1) +
+  theme_bw()
+
+DEC_PA_nmds
+```
+
+#Multiplot for paper
+```{r}
+#Update plots
+path_PA_nmds_final<-path_PA_nmds+
+  labs(color="Community type")+
+  scale_color_manual(values=c("#3F4A8A", "#26838F", "#6DCD59", "#FDE725"),
+    labels=c("Urban", "Intermediate", "Rural (road)", "Rural (river)"))+
+  theme(legend.position="none")
+
+bact_PA_nmds_final<-bact_PA_nmds+
+  labs(color="Community type")+
+  scale_color_manual(values=c("#3F4A8A", "#26838F", "#6DCD59", "#FDE725"),
+    labels=c("Urban", "Intermediate", "Rural (road)", "Rural (river)"))+
+  theme(legend.position="none")
+
+vir_PA_nmds_final<-vir_PA_nmds+
+  labs(color="Community type")+
+  scale_color_manual(values=c("#3F4A8A", "#26838F", "#6DCD59", "#FDE725"),
+    labels=c("Urban", "Intermediate", "Rural (road)", "Rural (river)"))+
+  theme(legend.position="none")
+
+#extract legend
+path_PA_nmds_legend<-path_PA_nmds+
+  labs(color="Community type")+
+  scale_color_manual(values=c("#3F4A8A", "#26838F", "#6DCD59", "#FDE725"),
+    labels=c("Urban", "Intermediate", "Rural (road)", "Rural (river)"))+
+  guides(color=guide_legend(ncol=4))
+legend<-get_legend(path_PA_nmds_legend)
+legend_plot <- ggdraw() + draw_grob(legend)
+legend_plot
+
+PA_NMDS<-plot_grid(path_PA_nmds_final, bact_PA_nmds_final, vir_PA_nmds_final, legend_plot, labels=c("a)", "b)", "c)", ""), ncol=1, rel_heights = c(1, 1, 1, 0.35))
+
+PA_NMDS
+
+ggsave(filename="C:/Users/kelse/OneDrive - UW/ECoMiD/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Figures/Figure S3/NMDS.png", plot=PA_NMDS, device="png", width=4, height=11, dpi=600)
+```

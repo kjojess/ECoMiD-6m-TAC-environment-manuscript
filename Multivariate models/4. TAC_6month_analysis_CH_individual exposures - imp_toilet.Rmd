@@ -1,0 +1,488 @@
+---
+title: "Analyses for Envt-TAC 6mo analyses"
+author: "Caitlin Hemlock"
+date: "Updated `r Sys.time()`"
+output: 
+  html_document:
+    theme: default
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+---
+
+## Preamble
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+```{r}
+rm(list=ls())
+library(kableExtra)
+library(ggplot2)
+library(dplyr)
+library(geepack)
+library(flextable)
+library(lmtest)
+library(tidyverse)
+```
+
+## Data Management
+
+### Load data
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#read in Nicolette's dataset
+#d <- readRDS("~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Export_files/6mo analysis data.rds") 
+d <- readRDS("Export_files/6mo analysis data.rds") 
+
+d <- d %>%
+  select(-anyvirus) %>%
+  dplyr::rename(comm_type = Community.Type,
+         animal_score = animal_score_overall_child,
+         vacc4m = four_month_vaccines,
+         vacc6m = six_month_vaccines,
+         age_day = age_in_days,
+         anyinfection = Any_infection_noCOVID,
+         coinfection = Any_co_infection_noCOVID,
+         anyvirus = Any_virus_noCOVID,
+         numpathogens = Any_infection_noCOVID_number) %>%
+  mutate(comm_type = factor(comm_type, 
+                            levels = c("urban", "semi-urban",
+                                       "rural - road", "rural - river"),
+                            labels = c("Urban", "Semi-urban",
+                                       "Rural (road)", "Rural (river)")))
+
+d_pathogens <- d%>%
+  select(Ascaris:STEC)%>%
+  summarise_all(sum)
+  
+```
+
+#prescreen function
+```{r}
+
+prescreen <- function (Y, Ws, family = "gaussian", pval = 0.2, print = TRUE) 
+{
+    require(lmtest)
+    if (family[[1]] == "neg.binom") {
+        require(MASS)
+    }
+    if (pval > 1 | pval < 0) {
+        stop("P-value threshold not set between 0 and 1.")
+    }
+    Ws <- as.data.frame(Ws)
+    dat <- data.frame(Ws, Y)
+    dat <- dat[complete.cases(dat), ]
+    nW <- ncol(Ws)
+    LRp <- matrix(rep(NA, nW), nrow = nW, ncol = 1)
+    rownames(LRp) <- names(Ws)
+    colnames(LRp) <- "P-value"
+    if (family[[1]] != "neg.binom") {
+        for (i in 1:nW) {
+            dat$W <- dat[, i]
+            if (class(dat$W) == "factor" & dim(table(dat$W)) == 
+                1) {
+                fit1 <- fit0 <- glm(Y ~ 1, data = dat, family = family)
+            }
+            else {
+                fit1 <- glm(Y ~ W, data = dat, family = family)
+                fit0 <- glm(Y ~ 1, data = dat, family = family)
+            }
+            LRp[i] <- lrtest(fit1, fit0)[2, 5]
+        }
+    }
+    else {
+        if (!requireNamespace("MASS", quietly = TRUE)) {
+            stop("Pkg needed for this function to work. Please install it.", 
+                call. = FALSE)
+        }
+        else {
+            for (i in 1:nW) {
+                dat$W <- dat[, i]
+                if (class(dat$W) == "factor" & dim(table(dat$W)) == 
+                  1) {
+                  fit1 <- fit0 <- glm.nb(Y ~ 1, data = dat)
+                }
+                else {
+                  fit1 <- glm.nb(Y ~ W, data = dat)
+                  fit0 <- glm.nb(Y ~ 1, data = dat)
+                }
+                LRp[i] <- lrtest(fit1, fit0)[2, 5]
+            }
+        }
+    }
+    p20 <- ifelse(LRp < pval, 1, 0)
+    if (print == TRUE) {
+        cat("\nLikelihood Ratio Test P-values:\n")
+        print(round(LRp, 5))
+        if (sum(p20) > 0) {
+            LRps <- matrix(LRp[p20 == 1, ], ncol = 1)
+            rownames(LRps) <- names(Ws)[p20 == 1]
+            colnames(LRps) <- "P-value"
+            cat(paste("\n\nCovariates selected (P<", pval, "):\n", 
+                sep = ""))
+            print(LRps)
+        }
+        else {
+            cat(paste("\nNo covariates were associated with the outcome at P<", 
+                pval))
+        }
+    }
+    return(names(Ws)[p20 == 1])
+}
+```
+
+#Linear regression models - "imp_toilet", 
+```{r}
+models <- d 
+
+#select exposures of interest
+exposures <- c("imp_toilet")
+
+#select outcomes
+ outcomes <- c("anyinfection", "coinfection", "numpathogens", "anyvirus", 
+               "anybacteria", 
+               "anyparasite", 
+               "Enterovirus", #111
+               #"Giardia_18S", #15
+               "Rotavirus", #15
+               #"Astrovirus",
+               "Adenovirus", #45
+               "Norovirus", #20
+               "Salmonella", #25
+               "Campylobacter", #38
+               "EAEC", #171
+               "DAEC", #85
+               "tEPEC", #21
+               "aEPEC", #78
+               "ETEC", #47
+               "EIEC_or_Shigella") #14
+               
+
+               #"Ascaris", #1
+               # #13
+               #"Cyclospora_cayetanesis", #0
+               #"Entamoeba", #1
+               #"Sapovirus", #6
+               #"Trichuris", #2
+               #"Cryptosporidium", #6
+               #"EHEC") #5
+               #"STEC") #2
+
+#select covariates for all models
+covariates <- c("male", "excl_bf", "hhwealthquart", "momedu_cat",  
+                "vacc4m")
+
+cov_prescreen <- c("age_day", "momage", "birthorder", "hfiacat", "m_eth_afro", "vagbirth")
+
+# 
+results <- NULL
+vif <- NULL
+covars_final <- NULL
+for(i in outcomes){
+    print(i)
+    W_selected <- models %>% select(all_of(cov_prescreen))
+    if(i == "numpathogens"){
+      W_selected <- prescreen(models[[i]], W_selected, family = "poisson", pval = 0.2, print = T)
+    } else{
+      W_selected <- prescreen(models[[i]], W_selected, family = "binomial", pval = 0.2, print = T)
+    }
+  for(j in exposures){
+    print(j)
+    data <- models %>%
+      select(house_ID, comm_type, rainy, i, j) #add rainy
+    
+    data <- data[complete.cases(data),]
+    
+    #unadjusted
+    formula <- as.formula(paste0(i, " ~ ", j))
+    model <- geeglm(formula, data = data, id = data$house_ID,
+                      family = poisson(link = "log"), corstr = "exchangeable")
+    
+    if(j %in% c("comm_type")){
+      res <- broom::tidy(model, conf.int = T, exponentiate = T)[c(2:4),c(1,2,5:7)]
+      } else if(j %in% c("floors", "toilet_type")){
+        res <- broom::tidy(model, conf.int = T, exponentiate = T)[c(2:5),c(1,2,5:7)]
+      } else if(j %in% c("water_type")){
+        res <- broom::tidy(model, conf.int = T, exponentiate = T)[c(2:6),c(1,2,5:7)]
+      } else if(j %in% c("birthorder", "hfiacat")){
+        res <- broom::tidy(model, conf.int = T, exponentiate = T)[c(2:3),c(1,2,5:7)]
+      } else {
+        res <- broom::tidy(model, conf.int = T, exponentiate = T)[c(2),c(1,2,5:7)]
+      }
+    
+    #round estimates and CIs
+    #res[,2:5] <- round(res[,2:5], 2)
+    
+    #bind info
+    ures <- cbind(outcome = i,
+                 exposure = j,
+                 level = stringr::str_remove(res$term, j),
+                 n = nrow(model$model),
+                 res[,2], res[,4:5], res[,3], intp = NA,
+                 adjusted = "Unadjusted")
+    
+    #bind to all results
+    results <- rbind(results, ures)
+    
+    #adjusted
+    data <- models %>%
+      select(house_ID, i, j, comm_type, rainy, all_of(W_selected), all_of(covariates)) #add rainy here
+        
+    data <- data[complete.cases(data),]
+    
+    if(j == "comm_type"){
+      formula <- as.formula(paste0(i, "~", j, " + rainy +", 
+                                   paste(W_selected, collapse = " + "),
+                                   " + ", paste(covariates, collapse = " + ")))
+      
+      covars.tmp <- paste0(paste(W_selected, collapse = " +"),
+                                   "+ rainy + ", paste(covariates, collapse = " + "))
+      
+    } else if(j=="rainy"){
+      formula <- as.formula(paste0(i, "~", j, " + comm_type +", 
+                                   paste(W_selected, collapse = " + "),
+                                   " + ", paste(covariates, collapse = " + ")))
+      
+      covars.tmp <- paste0(paste(W_selected, collapse = " +"),
+                                   " + comm_type + ", paste(covariates, collapse = " + "))
+      
+    } else {
+      formula <- as.formula(paste0(i, "~", j, " + comm_type + rainy +", 
+                                   paste(W_selected, collapse = " + "),
+                                   " + ", paste(covariates, collapse = " + ")))
+      
+      covars.tmp <- paste0("comm_type + rainy +", 
+                                   paste(W_selected, collapse = " + "),
+                                   " + ", paste(covariates, collapse = " + "))
+    }
+    model <- geeglm(formula, data = data, id = data$house_ID,
+                      family = poisson(link = "log"), corstr = "exchangeable")
+    
+    
+    #vif
+    vif.temp <- data.frame(car::vif(model))
+    vif.temp <- data.frame(var = rownames(vif.temp), vif = vif.temp$GVIF, exposure = j, outcome = i)
+    
+    #try to remove any variables besides community type and exposure of interest first
+    if(max(vif.temp$vif)>10){
+    vif.temp <- vif.temp %>% filter(var != "comm_type" & var != j) #rainy probably not needed here
+    remove <- vif.temp$var[which(vif.temp$vif == max(vif.temp$vif))]
+    vif.temp <- vif.temp %>% filter(var != remove)
+    W_selected2 <- c(vif.temp$var, "comm_type") #rainy probably not needed here
+
+    #refit model
+    formula <- as.formula(paste0(i, "~", j, " + ", paste(W_selected2, collapse = " + ")))
+    model <- geeglm(formula, data = data, id = data$house_ID,
+                      family = poisson(link = "log"), corstr = "exchangeable")
+    
+    covars.tmp <- paste(W_selected2, collapse = " + ")
+
+    #check again
+    vif.temp <- data.frame(car::vif(model))
+    vif.temp <- data.frame(var = rownames(vif.temp), vif = vif.temp$GVIF, exposure = j, outcome = i)
+    
+    #if VIF is still high, add community type in as potential covariate to remove
+    if(max(vif.temp$vif)>10){
+    vif.temp <- vif.temp %>% filter(var != j)
+    remove <- vif.temp$var[which(vif.temp$vif == max(vif.temp$vif))]
+    vif.temp <- vif.temp %>% filter(var != remove)
+    W_selected2 <- c(vif.temp$var)
+    
+    #refit model
+    formula <- as.formula(paste0(i, "~", j, " + ", paste(W_selected2, collapse = " + ")))
+    model <- geeglm(formula, data = data, id = data$house_ID,
+                      family = poisson(link = "log"), corstr = "exchangeable")
+    
+    covars.tmp <- paste(W_selected2, collapse = " + ")
+    
+    #do it again
+    if(max(vif.temp$vif)>10){
+    vif.temp <- vif.temp %>% filter(var != j)
+    remove <- vif.temp$var[which(vif.temp$vif == max(vif.temp$vif))]
+    vif.temp <- vif.temp %>% filter(var != remove)
+    W_selected2 <- c(vif.temp$var)
+    
+    #refit model
+    formula <- as.formula(paste0(i, "~", j, " + ", paste(W_selected2, collapse = " + ")))
+    model <- geeglm(formula, data = data, id = data$house_ID,
+                      family = poisson(link = "log"), corstr = "exchangeable")
+    
+    covars.tmp <- paste(W_selected2, collapse = " + ")
+    
+    #do it again
+    if(max(vif.temp$vif)>10){
+    vif.temp <- vif.temp %>% filter(var != j)
+    remove <- vif.temp$var[which(vif.temp$vif == max(vif.temp$vif))]
+    vif.temp <- vif.temp %>% filter(var != remove)
+    W_selected2 <- c(vif.temp$var)
+    
+    #refit model
+    formula <- as.formula(paste0(i, "~", j, " + ", paste(W_selected2, collapse = " + ")))
+    model <- geeglm(formula, data = data, id = data$house_ID,
+                      family = poisson(link = "log"), corstr = "exchangeable")
+    
+    covars.tmp <- paste(W_selected2, collapse = " + ")
+    
+    }
+    }
+    }
+    }
+    
+    vif <- rbind(vif, vif.temp)
+    
+    if(j %in% c("comm_type")){
+      res <- broom::tidy(model, conf.int = T, exponentiate = T)[c(2:4),c(1,2,5:7)]
+      } else if(j %in% c("floors", "toilet_type")){
+        res <- broom::tidy(model, conf.int = T, exponentiate = T)[c(2:5),c(1,2,5:7)]
+      } else if(j %in% c("water_type")){
+        res <- broom::tidy(model, conf.int = T, exponentiate = T)[c(2:6),c(1,2,5:7)]
+      } else if(j %in% c("birthorder", "hfiacat")){
+        res <- broom::tidy(model, conf.int = T, exponentiate = T)[c(2:3),c(1,2,5:7)]
+      } else {
+        res <- broom::tidy(model, conf.int = T, exponentiate = T)[c(2),c(1,2,5:7)]
+      }
+    
+    #output final covariates for each one
+    covars_final  <- rbind(covars_final, cbind(exposure = j, outcome = i, covars = covars.tmp))
+    
+    #round estimates and CIs
+    #res[,2:5] <- round(res[,2:5], 2)
+    
+    #bind info
+    ares <- cbind(outcome = i,
+                 exposure = j,
+                 level = stringr::str_remove(res$term, j),
+                 n = nrow(model$model),
+                 res[,2], res[,4:5], res[,3],
+                 adjusted = "Adjusted", intp = NA)
+    
+    results <- rbind(results, ares)
+  }
+}
+
+```
+
+#FDR
+```{r}
+results_adjusted <- results%>%
+  subset(adjusted == "Adjusted")%>%
+  select(outcome, exposure, p.value, adjusted)
+
+results_imp_toilet <- results_adjusted%>%
+  mutate(FDR_p.value = p.adjust(p.value, "fdr"))
+
+#merge
+results <- results%>%
+  left_join(results_imp_toilet, by=c("outcome", "exposure", "p.value", "adjusted"))
+
+```
+
+#output results
+```{r}
+#output results
+results.out <- results %>%
+  select(-intp)
+
+#saveRDS(results.out, "~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Export_files/MVM results.rds") 
+saveRDS(results.out, "Export_files/MVM results_individual exposures_toilet_20240614.rds") 
+
+saveRDS(vif, "Export_files/MVM results_vif_individual exposures_toilet_20240614.rds") 
+
+#output covariates selected
+covars_out <- as.data.frame(covars_final) %>%
+  mutate(covars = str_replace(covars, " [+]  [+] ", " + ")) %>%
+  tidyr::separate(covars, c("var1", "var2", "var3", "var4", "var5", "var6",
+                            "var7", "var8", "var9", "var10"), sep = "[+]") %>%
+  mutate(across(c(var1, var2, var3, var4, var5, var6,
+                            var7, var8, var9, var10), function(x) ifelse(x==" ", NA, x))) %>%
+  mutate(across(c(var1, var2, var3, var4, var5, var6,
+                            var7, var8, var9, var10), function(x) str_replace_all(x, " ", ""))) %>%
+  rowwise() %>%
+  mutate(covariates = paste0(na.omit(c(var1, var2, var3, var4, var5, var6,
+                            var7, var8, var9, var10)), collapse = ", ")) %>%
+  ungroup() %>%
+  select(-c(var1, var2, var3, var4, var5, var6,
+                            var7, var8, var9, var10)) 
+
+#saveRDS(covars_out, "~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/Export_files/MVM covariates used.rds") 
+saveRDS(covars_out, "Export_files/MVM covariates used_individual exposures_toilet_20240614.rds") 
+
+```
+
+#create table
+```{r}
+outcomes <- c("anyinfection", "coinfection", "numpathogens", "anyvirus", 
+               "anybacteria", "anyparasite")
+
+#create table
+table <- results %>%
+  mutate(p.value = ifelse(is.na(estimate) | (conf.low == 0 & conf.high == 0), NA, p.value),
+         estimate = ifelse(conf.low == 0 & conf.high == 0, NA, format(round(estimate,2))),
+         conf.low = ifelse(conf.low == 0 & conf.high == 0, NA, format(round(conf.low,2))),
+         conf.high = ifelse(conf.low == 0 & conf.high == 0, NA, format(round(conf.high,2)))) %>%
+  mutate(stars = case_when(p.value <0.001 ~ "***",
+                           p.value < 0.05 ~ "**",
+                           p.value < 0.1 ~ "*",
+                           TRUE ~ ""),
+         estimate = paste0(estimate, " (",conf.low, ", ", conf.high, ")", stars)) %>%
+  select(outcome, exposure, level, estimate, adjusted) %>%
+  tidyr::pivot_wider(names_from = "adjusted", values_from = "estimate")
+
+table.a <- table[which(table$outcome == outcomes[1]),-1]
+for(i in outcomes[2:7]){
+  temp <- table[which(table$outcome == i),-1]
+  table.a <- left_join(table.a, temp, by = c("exposure", "level"))
+}
+
+#kable
+kable(table.a,
+      col.names = c("Exposure", "Level",
+                    "RR", "aRR",
+                    "RR", "aRR",
+                    "CR", "aCR",
+                    "RR", "aRR",
+                    "RR", "aRR",
+                    "RR", "aRR",
+                    "RR", "aRR")) %>%
+  kable_styling(bootstrap_options = "striped",
+                 full_width = F) %>%
+      add_header_above(c(" " = 2, "Any Infection" = 2, "Coinfection" = 2, 
+                         "Number of Pathogens" = 2, "Any Virus" = 2,
+                         "Any Bacteria" = 2, "Any Parasite" = 2,
+                         "Zoonotic" = 2)) 
+  
+
+#save as doc
+restable <- table.a %>%
+  flextable() %>%
+  delete_part(part = "header") %>%
+  add_header_row(c("Exposure", "Level",
+                    "RR", "aRR",
+                    "RR", "aRR",
+                    "CR", "aCR",
+                    "RR", "aRR",
+                    "RR", "aRR",
+                    "RR", "aRR",
+                    "RR", "aRR"), colwidths = rep(1,16), top = T) %>%
+  hline_bottom(part = "header")%>%
+  add_header_row(c(" ", "Any Infection", "Coinfection", 
+                         "Number of Pathogens", "Any Virus",
+                         "Any Bacteria", "Any Parasite",
+                         "Zoonotic"), colwidths = rep(2,8), top = TRUE) %>%
+  align(i = c(1,2), j = c(3:16), part = "header", align = "center") %>%
+  hline_top(part = "header") %>%
+  align(j = 3:16, part = "body", align = "center")
+
+#save_as_docx(restable, path = "~/UW/ecomid - Documents/6. Lab activities/TAC data/TAC analysis R/02-6 months paper/CH tables figs/MVM results.docx")
+save_as_docx(restable, path = "Figures/MVM results_individual exposures_toilet_20240614.docx")
+
+```
+
+
