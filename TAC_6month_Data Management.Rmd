@@ -1,0 +1,941 @@
+---
+title: "TAC_16S_Survey_6month_Combined"
+author: "Nicolette Zhou"
+date: '2024-01-09'
+output: html_document
+---
+
+#Clear env, load libraries
+```{r}
+rm(list = ls())
+
+library(tidyverse)
+library(here)
+library(dvmisc)
+library(FactoMineR)
+library(factoextra)
+library(readxl)
+```
+
+#Load data
+```{r}
+# load("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/cleaned data/A1.Rda")
+# 
+# load("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/cleaned data/C1.Rda")
+# 
+# load("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/cleaned data/C2.Rda")
+# 
+# load("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/cleaned data/C3.Rda")
+# 
+# load("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/cleaned data/D1.Rda")
+# 
+# load("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/cleaned data/D2.Rda")
+# 
+# load("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/cleaned data/I1.Rda")
+# 
+# load("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/cleaned data/I1_babystool.Rda")
+
+A1_processed <- readxl::read_excel("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/processed data/A1 with codebook.xlsx", guess_max = 1000000)
+
+C1_processed <- readxl::read_excel("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/processed data/C1 with codebook.xlsx", guess_max = 1000000)
+
+C2_processed <- readxl::read_excel("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/processed data/C2 with codebook.xlsx", guess_max = 1000000)
+
+C3_processed <- readxl::read_excel("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/processed data/C3 with codebook.xlsx", guess_max = 1000000)
+
+D1_processed <- readxl::read_excel("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/processed data/D1 with codebook.xlsx", guess_max = 1000000)
+
+D2_processed <- readxl::read_excel("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/processed data/D2 with codebook.xlsx", guess_max = 1000000)
+
+D2_SES_processed <- readxl::read_excel("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/processed data/D2 SES with codebook.xlsx", guess_max = 1000000)
+
+I1_processed <- readxl::read_excel("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/processed data/I1 with codebook.xlsx", guess_max = 1000000)
+
+load("../../../../3. Data and analysis related/Data & Data Cleaning/Data cleaning and data checking scripts/cleaned data/participant_tracking.Rda")
+
+D1_animal_score <- read.csv("../../../../3. Data and analysis related/Analysis/Nicolette/Other scripts/Export files/D1_animals_overall.csv")
+
+WaterQuality <- read.csv("../../../../3. Data and analysis related/Analysis/Nicolette/Other scripts/Export files/WaterQuality.csv")
+
+E1_breastfeeding_6months <- read.csv("../../../../3. Data and analysis related/Analysis/Nicolette/Other scripts/Export files/E1_breastfeeding_6months_updated.csv")
+
+child_dob <- participant_tracking %>%
+  select(child_dob, house_ID)%>%
+  mutate_at(c("child_dob"), as.Date)
+
+#surveychoices <- read.csv("../02-6 months paper/Export_files/TAC_survey_data_6months_surveychoices.csv")
+
+key <- read.csv("../02-6 months paper/Import_files/key.csv")
+write.csv(key, file="Export_files/Key for 6mo analysis data.csv")
+
+precovid <- read.csv("../../../../3. Data and analysis related/Analysis/Nicolette/Import files/20230713_EcoMid Cohort.csv")%>%
+  select(house_ID, covidpause)%>%
+  mutate(post_covid = case_when(covidpause == "2.Enrolled after COVID pause" ~ 1,
+                                covidpause == "1.Enrolled before COVID pause" ~ 0,
+                                TRUE ~ NA))%>%
+  select(-covidpause)
+```
+
+#Import Exposure variables - SES
+```{r}
+#SES (household_possessions from D2)
+ses <- D2_SES_processed %>%
+  filter(visitn == 1) %>%
+  select(house_ID, asset_radio, asset_landline, asset_microwave, asset_tv, asset_fridge, asset_computer, asset_watch, asset_internet, asset_cellphone, asset_bike, asset_motorcycle, asset_scooter, asset_animalcart, asset_car_truck, asset_engineboat)
+
+# ses <- splitstackshape::concat.split.expanded(ses, split.col = "household_possessions", fill = 0, sep = " ", type = "character", drop = TRUE)
+# 
+# ses <- ses %>%
+#   select(house_ID, household_possessions_1,
+#          household_possessions_2,
+#          household_possessions_3,
+#          household_possessions_4,
+#          household_possessions_5,
+#          household_possessions_6,
+#          household_possessions_7,
+#          household_possessions_8,
+#          household_possessions_9,
+#          household_possessions_10:household_possessions_15) %>%
+#   distinct() %>%
+#   dplyr::rename(radio=household_possessions_1 ,
+#          landline= household_possessions_2 ,
+#          microwave= household_possessions_3,
+#          tv = household_possessions_4 ,
+#          fridge= household_possessions_5,
+#          computer= household_possessions_6 ,
+#          watch=household_possessions_7 ,
+#          internet=household_possessions_8 ,
+#          cellphone= household_possessions_9 ,
+#          bike= household_possessions_10 ,
+#          motorcycle= household_possessions_11,
+#          scooter=household_possessions_12 ,
+#          animalcart = household_possessions_13 ,
+#          car_truck = household_possessions_14 ,
+#          engineboat= household_possessions_15) 
+
+ses$asset_radio<-as.factor(ses$asset_radio)
+ses$asset_landline<-as.factor(ses$asset_landline)
+ses$asset_microwave<-as.factor(ses$asset_microwave)
+ses$asset_tv<-as.factor(ses$asset_tv)
+ses$asset_fridge<-as.factor(ses$asset_fridge)
+ses$asset_computer<-as.factor(ses$asset_computer)
+ses$asset_watch<-as.factor(ses$asset_watch)
+ses$asset_internet<-as.factor(ses$asset_internet)
+ses$asset_cellphone<-as.factor(ses$asset_cellphone)
+ses$asset_bike<-as.factor(ses$asset_bike)
+ses$asset_motorcycle<-as.factor(ses$asset_motorcycle)
+
+ses <- ses %>%
+  select(-asset_engineboat, -asset_scooter, -asset_animalcart, -asset_car_truck)
+
+ses <- ses %>%
+  mutate(across(c(names(ses[,2:ncol(ses)])), as.factor))
+
+mca1 = MCA(ses[,-c(1)], ncp = 5, graph = FALSE)
+
+ses <- data.frame(house_ID = ses$house_ID, hhwealth = get_mca_ind(mca1)$coord[,1])
+
+ses <- ses %>%
+  mutate(hhwealthquart = ntile(hhwealth, 4)) #quartiles
+
+#Maternal ethnicity
+momethnicity <- C1_processed%>%
+  select(house_ID, visitn, ethnicity) %>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from = visitn, values_from = ethnicity) %>%
+  mutate(mom_ethnicity = coalesce(`1`,`4`,`5`,`7`,`9`,`10`)) %>%
+  select(house_ID, mom_ethnicity)%>%
+  mutate(m_eth_afro = ifelse(mom_ethnicity == 1, 1, 0))
+
+#Child ethnicity
+childethnicity <- C2_processed%>%
+  select(house_ID, visitn, ethnicity)%>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from = visitn, values_from = ethnicity) %>%
+  mutate(child_ethnicity = coalesce(`2`,`3`,`4`,`5`,`6`,`7`,`8`,`9`,`10`)) %>%
+  select(house_ID, child_ethnicity)%>%
+  mutate(c_eth_afro = ifelse(child_ethnicity == 1, 1, 0))
+
+#Crowding (numrooms and numpeople in D2)
+crowding <- D2_SES_processed %>%
+  mutate(numrooms = ifelse(numrooms == 0, 1, numrooms)) %>%
+  mutate(hhcrowd = ifelse((numpeople/numrooms) >= 3, 1, 0)) %>%
+  select(house_ID, visitn, hhcrowd) %>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from = visitn, values_from = hhcrowd) %>%
+  mutate(hhcrowd = coalesce(`1`,`4`,`6`,`8`,`10`)) %>%
+  select(house_ID, hhcrowd)
+
+#Maternal age (mom_age in A1)
+mage <- A1_processed %>%
+  mutate(momage = as.numeric(mom_age),
+         mage_cat = cut(momage, breaks = c(0,22,30,100), labels = c("<22", "22-<30", ">=30"),
+                        ordered_result = T, right = F)) %>%
+  select(house_ID, momage, mage_cat) %>%
+  filter(!is.na(house_ID))
+
+#Birth order
+birthorder <- C1_processed %>%
+  filter(visitn == 1) %>%
+  mutate(birthorder = as.factor(case_when(totalchildren == 0 ~ "1",
+                                          totalchildren == 1 ~ "2",
+                                          totalchildren >= 2 ~ "3+"))) %>%
+  select(house_ID, birthorder) 
+
+#Maternal education
+momedu <- C1_processed %>% 
+  filter(!is.na(yearsed)) %>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID) %>%
+  mutate(momedu = last(yearsed)) %>%
+  select(house_ID, community, momedu) %>%
+  distinct() %>%
+  mutate(momedu = ifelse(momedu == 28, NA, momedu))%>%
+  mutate(momedu_cat = case_when(momedu <= 6 ~ "Primary or less",
+                                momedu > 6 & momedu <= 9 ~ "Lower secondary",
+                                momedu > 9 & momedu <= 12 ~ "Upper secondary",
+                                momedu > 12 ~ "Post-secondary or greater"),
+         momedu_cat = factor(momedu_cat, levels = c("Primary or less", "Lower secondary",
+                                                    "Upper secondary", "Post-secondary or greater")))
+
+```
+
+#Import Exposure variables - Demographics
+```{r}
+#Child sex
+sex <- C2_processed%>%
+  select(house_ID, visitn, sexo_nino)%>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from = visitn, values_from = sexo_nino) %>%
+  mutate(sexo_nino = coalesce(`2`,`3`,`4`,`5`,`6`,`7`,`8`,`9`,`10`)) %>%
+  select(house_ID, sexo_nino)%>%
+  mutate(male = ifelse(sexo_nino == 1, 1, 0))
+
+#Child age
+childage <- I1_processed%>%
+  left_join(child_dob, by=c("house_ID"))%>%
+  mutate_at(c("date"), as.Date)%>%
+  mutate(age_in_days = date - child_dob)%>%
+  subset(visitn == 4)%>%
+  subset(sampletype == 1)%>%
+  select(house_ID, age_in_days)
+
+#Type of birth
+birthtype <- C2_processed%>%
+  select(house_ID, visitn, typebirth)%>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from = visitn, values_from = typebirth) %>%
+  mutate(typebirth = coalesce(`2`,`3`,`4`,`5`,`6`,`7`,`8`,`9`,`10`)) %>%
+  select(house_ID, typebirth)%>%
+  mutate(vagbirth = ifelse(typebirth == 1, 1, 0))
+
+#Community type
+communitytype <- participant_tracking%>%
+  mutate(Community.Type = case_when(house_ID > 9000 ~ "rural - road", 
+                                    house_ID > 8000 ~ "rural - road", 
+                                    house_ID > 7000 ~ "rural - river", 
+                                    house_ID > 6000 ~ "rural - road", 
+                                    house_ID > 5000 ~ "rural - river", 
+                                    house_ID > 4000 ~ "rural - river", 
+                                    house_ID > 3000 ~ "rural - road", 
+                                    house_ID > 2000 ~ "semi-urban", 
+                                    house_ID > 1000 ~ "urban", 
+                                    house_ID > 0000 ~ "rural - river", 
+                                    TRUE ~ "Unknown"))%>%
+  select(house_ID, Community.Type)
+
+```
+
+#Import Exposure variables - Animals
+```{r}
+#Animal exposure
+animal <- D1_animal_score %>%
+  subset(visitn == 4)%>%
+  select(house_ID, animal_score_overall_child)
+```
+
+#Import Exposure variables - Sanitation
+```{r}
+#Toilet type
+toilet <- D2_processed %>%
+  mutate(type_bathroom0 = as.character(type_bathroom0))%>%
+  mutate(type_bathroom_combined = if_else(!is.na(type_bathroom), type_bathroom, type_bathroom0),
+         #convert missing and other to NA
+         type_bathroom_combined = ifelse(type_bathroom_combined %in% c("999", "888"), NA, type_bathroom_combined)) %>%
+  select(house_ID, visitn, community, type_bathroom_combined) %>%
+  #remove rows with no community data (I think this is a tracking row)
+  filter(!is.na(community)) %>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  #remove duplicate visit data
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  #reshape to wide
+  tidyr::pivot_wider(names_from = visitn, values_from = type_bathroom_combined) %>%
+  #fill in missing data - prioritize data reported at 6mo, then whatever data is available at 37s, 12m, 18m, 24m
+  mutate(toilet = coalesce(`4`, `1`, `6`, `8`,`10`)) %>%
+  select(house_ID, toilet)
+
+# toilet_karen <- toilet%>%
+#   group_by(toilet)%>%
+#   summarise(n=n())
+
+#do same for sharing data
+share <- D2_processed %>%
+  mutate(share_bathroom_combined = if_else(!is.na(share_bathroom), share_bathroom, share_bathroom0),
+         share_bathroom_combined = ifelse(share_bathroom_combined %in% c("999", "888"), NA, share_bathroom_combined))%>%
+  select(house_ID, visitn, share_bathroom_combined)  %>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from = visitn, values_from = share_bathroom_combined) %>%
+  mutate(share = coalesce(`4`,`1`, `6`, `8`,`10`)) %>%
+  select(house_ID, share)
+
+toilet <- left_join(toilet, share, by = "house_ID") %>%
+  mutate(toilet_type = case_when(share == 1 & toilet %in% c("11", "12","13", "21", "22") ~ "Basic", 
+                                 share == 2 & toilet %in% c("11", "12","13", "21", "22") ~ "Limited",
+                                 toilet %in% c("14-15", "23", "41", "51") ~ "Unimproved",
+                                 toilet %in% c("61") ~ "Open defecation"))%>%
+  mutate(imp_toilet = case_when(toilet_type %in% c("Basic", "Limited") ~ 1,
+                                toilet_type %in% c("Unimproved", "Open defecation") ~ 0))%>%
+  select(house_ID, toilet_type, imp_toilet)         
+```
+
+#Import Exposure variables - Water
+```{r}
+#Water type (mainwaterconsumption in D1)
+water <- D1_processed %>%
+  filter(visitn == 1) %>%
+  mutate(water_piped = case_when(mainwaterconsumption %in% c(1,8,9)  ~ "Piped",
+                                mainwaterconsumption %in% c(2,4,10,11,12,3,5,6,7) |
+                                mainwaterconsumption_other %in% c("Agua  hervida", "Agua de bidon",
+                                                                    "Agua filtrada", "Agua hervida","Agua potable",
+                                                                    "Botellon", "Filtro", "Filtros",
+                                                                    "Purificador") ~ "Not piped"))%>%
+  mutate(water_cait = case_when(mainwaterconsumption %in% c(12,10) |
+                                  mainwaterconsumption_other %in% c("Agua  hervida", "Agua de bidon",
+                                                                    "Agua filtrada", "Agua hervida",
+                                                                    "Botellon", "Filtro", "Filtros",
+                                                                    "Purificador") ~ "Bottled/tank/filtered/boiled",
+                                mainwaterconsumption %in% c(8) ~ "Piped water connection",
+                                mainwaterconsumption %in% c(1,2) ~ "Protected/tubewell",
+                                mainwaterconsumption %in% c(9) ~ "Public tap",
+                                mainwaterconsumption %in% c(11) ~ "Rain water",
+                                mainwaterconsumption %in% c(3,5,6,7) ~ "Unprotected well/Surface water")) %>%
+  mutate(time_mainwaterconsumption = case_when(is.na(time_mainwaterconsumption) ~ 0,
+                                               time_mainwaterconsumption == 999 ~ 0,
+                                               TRUE ~ time_mainwaterconsumption))%>%
+  mutate(water_jmp = case_when(mainwaterconsumption %in% c(1,2,8,9, 4,10,11,12) & (time_mainwaterconsumption < 30) ~ "basic",
+                                mainwaterconsumption %in% c(1,2,8,9,4,10,11,12) & time_mainwaterconsumption >= 30 ~ "limited",
+                                mainwaterconsumption %in% c(3,5) ~ "unimproved",
+                                mainwaterconsumption %in% c(6,7) ~ "surface water"))%>%
+  mutate(imp_water = case_when(water_piped %in% c("Piped") ~ 1,
+                               water_piped %in% c("Not piped") ~ 0))%>%
+  mutate(imp_water_piped = case_when(water_piped %in% c("Piped") ~ 1,
+                                     water_piped %in% c("Not piped") ~ 0))%>%
+  mutate(imp_water_cait = case_when(water_cait %in% c("Bottled/tank/filtered/boiled", "Piped water connection", "Protected/tubewell", "Public tap") ~ 1,
+                                    water_cait %in% c("Rain water", "Unprotected well/Surface water") ~ 0))%>%
+  mutate(imp_water_jmp = case_when(water_jmp %in% c("basic", "limited") ~ 1,
+                                   water_jmp %in% c("unimproved", "surface water") ~ 0))%>%
+  select(house_ID, water_piped, water_cait, water_jmp, imp_water, imp_water_piped, imp_water_cait, imp_water_jmp) 
+
+# water_karen <- D1_processed %>%
+#   select(community, house_ID, visitn, time_mainwaterconsumption, mainwaterconsumption)%>%
+#   filter(visitn == 1) %>%
+#   mutate(time_mainwaterconsumption = case_when(is.na(time_mainwaterconsumption) ~ 0,
+#                                                time_mainwaterconsumption == 999 ~ 0,
+#                                                TRUE ~ time_mainwaterconsumption))%>%
+#   mutate(water_type = case_when(mainwaterconsumption %in% c(1,2,8,9) & (time_mainwaterconsumption < 30) ~ "basic - piped",
+#                                 mainwaterconsumption %in% c(4,10,11,12) & (time_mainwaterconsumption < 30) ~ "basic - other",
+#                                 mainwaterconsumption %in% c(1,2,8,9) & time_mainwaterconsumption >= 30 ~ "limited - piped",
+#                                 mainwaterconsumption %in% c(4,10,11,12) & time_mainwaterconsumption >= 30 ~ "limited - other",
+#                                 mainwaterconsumption %in% c(3,5) ~ "unimproved",
+#                                 mainwaterconsumption %in% c(6,7) ~ "surface water"))
+# 
+# water_karen2<- water_karen%>%
+#   group_by(water_type)%>%
+#   summarise(n=n())
+  
+#Water storage
+water_storage <- D1_processed%>%
+  select(house_ID, visitn, storewater)%>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from = visitn, values_from = storewater) %>%
+  mutate(storewater = coalesce(`4`,`1`)) %>%
+  select(house_ID, storewater)%>%
+  mutate(storewat = ifelse(storewater == 2, 1, 0))
+
+#E. coli detected in water
+drinkingwaterquality <- WaterQuality%>%
+  subset(visitn == 4)%>%
+  select(house_ID, WQ_DW_average_bin)%>%
+  mutate(wat_detect = ifelse(WQ_DW_average_bin %in% c("High","Low"), 1, 0))
+
+```
+
+#Import Exposure variables - Hygiene
+```{r}
+#E. coli detected in mom handwash
+mom_handwash <- WaterQuality%>%
+  subset(visitn == 4)%>%
+  select(house_ID, WQ_mom_average_bin)%>%
+  mutate(mhand_detect = ifelse(WQ_mom_average_bin %in% c("High","Low"), 1, 0))
+
+#E. coli detected in child handwash
+child_handwash <- WaterQuality%>%
+  subset(visitn == 4)%>%
+  select(house_ID, WQ_baby_average_bin)%>%
+  mutate(chand_detect = ifelse(WQ_baby_average_bin %in% c("High","Low"), 1,0))
+
+#Flooring
+floor <- D2_processed %>%
+  mutate(floors = case_when(matfloor %in% c(4, 1) | matfloor_other == 
+                              "La mitad es de cemento y la otra mitad es de tierra"~ "Earth/sand/palm/bamboo",
+                            matfloor == 3 ~ "Wooden boards",
+                            matfloor %in% c(7,5) ~ "Finished flooring",
+                            matfloor == 8 ~ "Cement",
+                            matfloor %in% c(9, NA) | matfloor_other == "Madera" ~ "Other")) %>%
+  select(house_ID, visitn, floors) %>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from = visitn, values_from = floors) %>%
+  mutate(floors = coalesce(`1`,`4`)) %>%
+  mutate(imp_floors = case_when(floors %in% c("Cement", "Finished flooring") ~ 1,
+                                floors %in% c("Earth/sand/palm/bamboo", "Wooden boards", "Other") ~ 0))%>%
+  select(house_ID, floors, imp_floors)
+
+#Hygiene score
+hygiene <- D2_processed %>%
+  mutate(
+    ## (new)CREATING SCORING FOR KITCHEN SECTION OF HOUSE:
+    # flies, dirty plates, dirty counters = 0 points
+    # one "good" response, two "bad responses" = 1 point
+    # two "good" responses = 2 points
+    # three "good" responses = 3 points
+    noflies = as.numeric(flies == 2),
+    yescleanplates = as.numeric(cleanplates == 2),
+    yescleancounter = as.numeric(cleancounter == 2),
+    kitch_score = noflies+yescleanplates+yescleancounter,
+    ##(new)CREATING SCORING FOR FOODCOVERED SECTION OF KITCHEN: ####################
+    # neither prepared or cooking food covered = 0 points
+    # prepared or cooking food covered (but not both) = 2 points
+    # both prepared and cooking food covered = 3 points
+    fc_score = case_when(prepared_foodcovered == 1 & cooking_foodcovered == 1 ~ 0,
+                         prepared_foodcovered == 2 & cooking_foodcovered == 1 |
+                           prepared_foodcovered == 1 & cooking_foodcovered == 2 ~ 2,
+                         prepared_foodcovered == 2 & cooking_foodcovered == 2 ~ 3),
+    ##(new)CREATING SCORING FOR GENERAL HOUSE SECTION: #############################
+    # no garbage, human feces, or animal feces = 3 points
+    # sum, ranges 0 - 3
+    nogarbage = as.numeric(casa_libre_basura == 1),
+    noh_feces = as.numeric(defecation_aire_libre == 1),
+    noa_feces = as.numeric(heces_animal_presente == 1),
+    gh_score = nogarbage+noh_feces+noa_feces,
+    ##(new)CREATING SCORING FOR SINK/HANDWASHING SECTION OF HOUSE: #################
+    # no washstation = 0 points
+    # handwashing station w/o soap OR water = 1 point
+    # handwashing station w/ soap OR water (but not both) = 2 points
+    # handwashing station w/ soap AND water = 3 points
+    handwash_score = case_when(washstation == 1 ~ 0,
+                               washstation_soap == 1 & washstation_water == 1 ~ 1,
+                               washstation_soap == 1 & washstation_water == 2 |
+                                 washstation_soap == 2 & washstation_water == 1 ~ 2,
+                               washstation_soap == 2 & washstation_water == 2 ~ 3),
+    ##(new)CREATING SCORING FOR BATHROOM HYGIENE SECTION OF HOUSE: #################
+    nofliesbath = as.numeric(flies_bathroom == 1),
+    yescoverlat = as.numeric(cover_latrine == 1),
+    nostoolbath = as.numeric(stool_bathroomfloor == 1),
+    bath_score = nofliesbath + yescoverlat + nostoolbath)
+
+#37s is prioritized because 6mo was only done for those missing at 37s
+hygiene <- hygiene %>%
+  select(house_ID, visitn, kitch_score, gh_score, handwash_score) %>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from = visitn, values_from = c(kitch_score, gh_score, handwash_score)) %>%
+  mutate(kitch_score = coalesce(kitch_score_1, kitch_score_4, kitch_score_6, kitch_score_8, kitch_score_10),
+         handwash_score = coalesce(handwash_score_1, handwash_score_4, handwash_score_6, 
+                                   handwash_score_8, handwash_score_10),
+         gh_score = coalesce(gh_score_1, gh_score_4, gh_score_6, gh_score_8, gh_score_10)) %>%
+  mutate(hygiene = kitch_score + handwash_score  + gh_score) %>%
+  select(house_ID, hygiene)
+
+```
+
+#Import Exposure variables - Nutrition
+```{r}
+#Breastfeeding at 6 months
+breastfeeding <- E1_breastfeeding_6months%>%
+  select(-X)%>%
+  mutate(excl_bf = ifelse(breastfeeding_status_final == "exclusive/predominant", 1, 0))
+
+#Food security (hfiacat in processed D1)
+hfia <- D1_processed %>%
+  mutate(hfia_cat = case_when(hfiacat %in% c(2,3) ~ "Mild-Moderately Food Insecure",
+                              hfiacat == 4 ~ "Severely Food Insecure",
+                              hfiacat == 1 ~ "Food Secure")) %>%
+  select(house_ID, visitn, hfia_cat) %>%
+  filter(visitn %in% c(1,4)) %>%
+  arrange(house_ID, visitn) %>%
+  group_by(house_ID, visitn) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  tidyr::pivot_wider(names_from = visitn, values_from = hfia_cat) %>%
+  mutate(hfiacat = coalesce(`1`,`4`)) %>%
+  select(house_ID, hfiacat)
+```
+
+#Import Exposure variables - Climate
+```{r}
+#Season
+season <- I1_processed%>%
+  select(house_ID, date, sampletype, visitn)%>%
+  subset(visitn==4)%>%
+  subset(sampletype==1)%>%
+  mutate(Collection.Month=substr(date,6,7))%>%
+  mutate_at(c("Collection.Month"), as.numeric)%>%
+  mutate(season=if_else(Collection.Month==1|Collection.Month==2|Collection.Month==3|Collection.Month==4|Collection.Month==5, "Rainy", if_else(Collection.Month==6|Collection.Month==7|Collection.Month==8|Collection.Month==9|Collection.Month==10|Collection.Month==11|Collection.Month==12, "Dry", "NA")))%>%
+  select(house_ID, season)%>%
+  mutate(rainy = ifelse(season == "Rainy", 1, 0))
+
+```
+
+#Import Exposure variables - Vaccination
+```{r}
+#Completed 4m vaccines
+#Completed 6m vaccines
+C3_01s <- C3_processed%>%
+  select(c(house_ID, visitn, BCG:HepB_date))%>%
+  subset(visitn==2)
+
+C3_06m <- C3_processed%>%
+  subset(visitn==4)%>%
+  select(house_ID, visitn, BCG:fifth_other_vaccine_date)
+
+vaccines <- C3_01s%>%
+  full_join(C3_06m, by=c("house_ID"), suffix = c("_01s","_06m"))%>%
+  select(-visitn_01s)
+
+vaccines <- vaccines%>%
+  dplyr::mutate(BCG = if_else(BCG_01s == 2 | BCG_06m == 2, 1, 0))%>%
+  dplyr::mutate(HepB = if_else(HepB_01s == 2 | HepB_06m == 2, 1, 0))%>%
+  dplyr::mutate(PENTA_series = if_else(PENTA == 2 & second_PENTA == 2 & third_PENTA == 2, 1, 0))%>%
+  dplyr::mutate(PENTA_first = if_else(PENTA == 2, 1, 0))%>%
+  dplyr::mutate(PENTA_second = if_else(second_PENTA == 2, 1, 0))%>%
+  dplyr::mutate(PENTA_third = if_else(third_PENTA == 2, 1, 0))%>%
+  dplyr::mutate(pneumococcal_series = if_else(pneumococcal == 2 & second_pneumococcal == 2 & third_pneumococcal == 2, 1, 0))%>%
+  dplyr::mutate(pneumococcal_first = if_else(pneumococcal == 2, 1, 0))%>%
+  dplyr::mutate(pneumococcal_second = if_else(second_pneumococcal == 2, 1, 0))%>%
+  dplyr::mutate(pneumococcal_third = if_else(third_pneumococcal == 2, 1, 0))%>%
+  dplyr::mutate(rotavirus_series = if_else(first_rotavirus == 2 & second_rotavirus == 2, 1, 0))%>%
+  dplyr::mutate(rotavirus_first = if_else(first_rotavirus == 2, 1, 0))%>%
+  dplyr::mutate(rotavirus_second = if_else(second_rotavirus == 2, 1, 0))%>%
+  dplyr::mutate(OPV_first = if_else(OPV == 2, 1, 0))%>%
+  dplyr::mutate(vaccine_complete = if_else(BCG==1 & HepB==1 & PENTA_series==1 & pneumococcal_series==1 & rotavirus_series==1 & OPV_first==1, 1, 0))%>%
+  dplyr::mutate(four_month_vaccines = if_else(PENTA_second + pneumococcal_second + rotavirus_second == 3, 1, 0))%>%
+  dplyr::mutate(six_month_vaccines = if_else(PENTA_third + pneumococcal_third + OPV == 3, 1, 0))%>%
+  select(house_ID, four_month_vaccines, six_month_vaccines)
+```
+
+#Merge survey data
+```{r}
+surveydata <- ses%>%
+  full_join(momethnicity, by=c("house_ID"))%>%
+  full_join(childethnicity, by=c("house_ID"))%>%
+  full_join(crowding, by=c("house_ID"))%>%
+  full_join(mage, by=c("house_ID"))%>%
+  full_join(birthorder, by=c("house_ID"))%>%
+  full_join(momedu, by=c("house_ID"))%>%
+  full_join(sex, by=c("house_ID"))%>%
+  full_join(childage, by=c("house_ID"))%>%
+  full_join(birthtype, by=c("house_ID"))%>%
+  full_join(communitytype, by=c("house_ID"))%>%
+  full_join(animal, by=c("house_ID"))%>%
+  full_join(toilet, by=c("house_ID"))%>%
+  full_join(water, by=c("house_ID"))%>%
+  full_join(water_storage, by=c("house_ID"))%>%
+  full_join(drinkingwaterquality, by=c("house_ID"))%>%
+  full_join(mom_handwash, by=c("house_ID"))%>%
+  full_join(child_handwash, by=c("house_ID"))%>%
+  full_join(floor, by=c("house_ID"))%>%
+  full_join(hygiene, by=c("house_ID"))%>%
+  full_join(breastfeeding, by=c("house_ID"))%>%
+  full_join(hfia, by=c("house_ID"))%>%
+  full_join(season, by=c("house_ID"))%>%
+  full_join(vaccines, by=c("house_ID"))%>%
+  mutate_at(c("house_ID"), as.numeric)%>%
+  distinct()
+
+surveydata_test <- surveydata%>%
+  select(house_ID)%>%
+  group_by(house_ID)%>%
+  dplyr::summarise(n=n())
+```
+
+#Key for survey data
+```{r}
+#keys for categorical variable codes
+# key <- surveychoices%>%
+#   select(-X, -index.variable)%>%
+#   subset(question_code == "ethnicity_mom" | 
+#          question_code == "ethnicity_child" | 
+#          question_code == "sexo_nino" | 
+#          question_code == "typebirth"|
+#          question_code == "storewater")%>%
+#   distinct()%>%
+#   mutate(answer_name = replace(answer_name, answer_name == "1. Afro-Ecuadorian", "Afro-Ecuadorian"),
+#          answer_name = replace(answer_name, answer_name == "2. Chachi", "Chachi"),
+#          answer_name = replace(answer_name, answer_name == "3. Mestizo", "Mestizo"),
+#          answer_name = replace(answer_name, answer_name == "4. Manabi", "Manabi"),
+#          answer_name = replace(answer_name, answer_name == "888. Other", "other"),
+#          answer_name = replace(answer_name, answer_name == "1. Male", "male"),
+#          answer_name = replace(answer_name, answer_name == "2. Female", "female"),
+#          answer_name = replace(answer_name, answer_name == "1. Vaginal", "vaginal"),
+#          answer_name = replace(answer_name, answer_name == "2. Caesarea", "C-section"),
+#          answer_name = replace(answer_name, answer_name == "1. No", "No"),
+#          answer_name = replace(answer_name, answer_name == "2. Yes", "Yes"))
+# 
+# write.csv(key, file="Export_files/Key for 6mo analysis data.csv")
+```
+
+#Load TAC data
+```{r}
+TAC_pathogens <- read.csv("../01-Master_data/Data_files/TAC_data_pathogensbysample.csv")%>%
+  subset(Age=="06m")%>%
+  select(-Community.type, -season, -X)%>%
+  mutate_at(c("Collection.Date"), as.Date)
+
+TAC_pathogens_cp <- read.csv("../01-Master_data/Data_files/TAC_data_pathogensbysample_cpnumbers.csv")%>%
+  subset(Age=="06m")%>%
+  select(-Community, -Community.type, -season, -sex, -Collection.Date, -Collection.Month, -X, -Age) %>%
+  rename_with(~paste0(., "_cp"), EAEC_aaiC:EIEC_virF)
+
+TAC_pathogens2<- TAC_pathogens%>%
+  select(HH.ID)%>%
+  mutate(TAC_analyzed = 1)
+  
+participant_tracking_TAC <- participant_tracking%>%
+  full_join(TAC_pathogens2, by=c("house_ID" = "HH.ID"))%>%
+  mutate(TAC_analyzed = case_when(TAC_analyzed == 1 ~ 1,
+                                  TRUE ~ 0))%>%
+  subset(TAC_analyzed == 0)
+```
+
+#Merge TAC data with survey data
+```{r}
+SurveyTACCombined <- TAC_pathogens%>%
+  left_join(surveydata, by=c("HH.ID"="house_ID"), suffix = c("_TAC","_survey"))%>%
+  left_join(TAC_pathogens_cp, by=c("HH.ID"), suffix = c("_survey","_cp"))%>%
+  mutate(anypathogen = if_else(Number_of_pathogens > 0, 1, 0))%>%
+  mutate(anybacteria = if_else(Number_of_bacterial_pathogens > 0, 1, 0))%>%
+  mutate(anyvirus = if_else(Number_of_viral_pathogens > 0, 1, 0))%>%
+  mutate(anyparasite = if_else(Number_of_parasite_pathogens > 0, 1, 0))%>%
+  mutate(Any_co_infection = case_when(Number_of_pathogens > 1 ~ 1, TRUE ~ 0))%>%
+  mutate(Virus_DNA = rowSums(select(.,Adenovirus)))%>%
+  mutate(Virus_RNA = rowSums(select(.,Astrovirus, Enterovirus, Rotavirus, Sapovirus, Norovirus, SARS_CoV_2)))%>%
+  mutate(Virus_RNA = case_when(Virus_RNA > 0 ~ 1, TRUE ~ 0))%>%
+  mutate(Any_infection_noCOVID_number = rowSums(select(.,Ascaris, Astrovirus, Cyclospora_cayetanesis, Entamoeba, Enterovirus, Giardia_18S, Rotavirus, Sapovirus, Trichuris, Adenovirus, Cryptosporidium, Norovirus, Salmonella, Campylobacter, EAEC, DAEC, tEPEC, aEPEC, ETEC, EIEC_or_Shigella, EHEC, STEC)))%>%
+  mutate(Any_infection_noCOVID = case_when(Any_infection_noCOVID_number > 0 ~ 1, TRUE ~ 0))%>%
+  mutate(Any_virus_noCOVID_number = rowSums(select(., Astrovirus, Enterovirus, Rotavirus, Sapovirus, Adenovirus, Norovirus)))%>%
+  mutate(Any_virus_noCOVID = case_when(Any_virus_noCOVID_number > 0 ~ 1, TRUE ~ 0))%>%
+  mutate(Any_co_infection_noCOVID = case_when(Any_infection_noCOVID_number > 1 ~ 1, TRUE ~ 0))%>%
+  mutate(zoonotic = rowSums(select(.,Ascaris, Giardia_18S, Cryptosporidium, Salmonella, Campylobacter, aEPEC, EHEC, STEC)))%>%
+  mutate(zoonotic = case_when(zoonotic > 0 ~ 1, TRUE ~ 0))%>%
+  mutate(waterborne = rowSums(select(.,Ascaris, Entamoeba, Enterovirus, Giardia_18S, Rotavirus, Sapovirus, Adenovirus, Cryptosporidium, Salmonella, Campylobacter, EAEC, DAEC, tEPEC, aEPEC, ETEC, EIEC_or_Shigella, EHEC, STEC)))%>%
+  mutate(waterborne = case_when(waterborne > 0 ~ 1, TRUE ~ 0))%>%
+  mutate(respiratory = rowSums(select(., Enterovirus, Adenovirus, SARS_CoV_2)))%>%
+  mutate(respiratory = case_when(respiratory > 0 ~ 1, TRUE ~ 0))%>%
+  mutate(foodborne = rowSums(select(.,Ascaris, Entamoeba, Enterovirus, Giardia_18S, Cryptosporidium, Norovirus, Salmonella, Campylobacter, tEPEC, aEPEC, ETEC, EIEC_or_Shigella, EHEC, STEC)))%>%
+  mutate(foodborne = case_when(foodborne > 0 ~ 1, TRUE ~ 0))%>%
+  dplyr::rename(house_ID = HH.ID)%>%
+  distinct()
+
+#how to relevel categorical variables
+relevel_mom_ethnicity <- SurveyTACCombined%>%
+  select(mom_ethnicity)%>%
+  group_by(mom_ethnicity)%>%
+  dplyr::summarise(n=n())
+
+relevel_child_ethnicity <- SurveyTACCombined%>%
+  select(child_ethnicity)%>%
+  group_by(child_ethnicity)%>%
+  dplyr::summarise(n=n())
+
+relevel_toilet_type <- SurveyTACCombined%>%
+  select(toilet_type)%>%
+  group_by(toilet_type)%>%
+  dplyr::summarise(n=n())
+
+# relevel_water_type <- SurveyTACCombined%>%
+#   select(water_type)%>%
+#   group_by(water_type)%>%
+#   dplyr::summarise(n=n())
+
+relevel_floors <- SurveyTACCombined%>%
+  select(floors)%>%
+  group_by(floors)%>%
+  dplyr::summarise(n=n())
+
+relevel_breastfeeding_status_final <- SurveyTACCombined%>%
+  select(breastfeeding_status_final)%>%
+  group_by(breastfeeding_status_final)%>%
+  dplyr::summarise(n=n())
+
+#relevel the variables
+SurveyTACCombined2 <- SurveyTACCombined %>% 
+  mutate(mom_ethnicity = factor(mom_ethnicity), mom_ethnicity=relevel(mom_ethnicity, "1"),
+         child_ethnicity = factor(child_ethnicity), child_ethnicity=relevel(child_ethnicity, "1"),
+         toilet_type = factor(toilet_type), toilet_type=relevel(toilet_type, "Basic"),
+         water_piped = factor(water_piped), water_piped=relevel(water_piped, "Piped"),
+         floors = factor(floors), floors=relevel(floors, "Cement"),
+         breastfeeding_status_final = factor(breastfeeding_status_final), breastfeeding_status_final=relevel(breastfeeding_status_final, "partial/weaned"), 
+         Community.Type = factor(Community.Type, levels = c("urban", "semi-urban", "rural - road", "rural - river")))%>%
+  subset(age_in_days >= 161.5 & age_in_days <= 203.5)
+
+saveRDS(SurveyTACCombined2, file="Export_files/6mo analysis data.rds")
+
+SurveyTACCombined3 <- SurveyTACCombined2%>%
+  left_join(precovid, by=c("house_ID"))%>%
+  subset(post_covid == 1)
+  
+
+#saveRDS
+
+SurveyTACCombined2_check <- SurveyTACCombined2%>%
+  select(house_ID)%>%
+  group_by(house_ID)%>%
+  dplyr::summarise(n=n())
+
+water_bin <- SurveyTACCombined2%>%
+  group_by(imp_water)%>%
+  dplyr::summarize(n=n())
+
+toilet_bin <- SurveyTACCombined2%>%
+  group_by(imp_toilet)%>%
+  dplyr::summarize(n=n())
+
+floor_bin <- SurveyTACCombined2%>%
+  group_by(imp_floors)%>%
+  dplyr::summarize(n=n())
+
+```
+
+#bar graphs
+```{r}
+SurveyTACCombined2 <- readRDS("Export_files/6mo analysis data.rds") 
+
+water_charts <- SurveyTACCombined2%>%
+  select(Community.Type, water_piped, water_cait, water_jmp, imp_water_cait, imp_water_jmp, wat_detect, imp_toilet, toilet_type, imp_floors, floors)
+
+water_piped_chart <- water_charts%>%
+  group_by(Community.Type, water_piped)%>%
+  dplyr::summarize(n=n())
+
+ggplot(water_piped_chart, aes(fill=water_piped, x=Community.Type, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+water_cait_chart <- water_charts%>%
+  group_by(Community.Type, water_cait)%>%
+  dplyr::summarize(n=n())
+
+ggplot(water_cait_chart, aes(fill=water_cait, x=Community.Type, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+water_jmp_chart <- water_charts%>%
+  group_by(Community.Type, water_jmp)%>%
+  dplyr::summarize(n=n())
+
+ggplot(water_jmp_chart, aes(fill=water_jmp, x=Community.Type, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+imp_water_cait_chart <- water_charts%>%
+  group_by(Community.Type, imp_water_cait)%>%
+  dplyr::summarize(n=n())%>%
+  mutate(imp_water_cait = case_when(imp_water_cait == 1 ~ "improved",
+                   imp_water_cait == 0 ~ "unimproved"))
+
+ggplot(imp_water_cait_chart, aes(fill=imp_water_cait, x=Community.Type, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+imp_water_jmp_chart <- water_charts%>%
+  group_by(Community.Type, imp_water_jmp)%>%
+  dplyr::summarize(n=n())%>%
+  mutate(imp_water_jmp = case_when(imp_water_jmp == 1 ~ "improved",
+                   imp_water_jmp == 0 ~ "unimproved"))
+
+ggplot(imp_water_jmp_chart, aes(fill=imp_water_jmp, x=Community.Type, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+##
+
+water_quality_chart <- water_charts%>%
+  group_by(Community.Type, wat_detect)%>%
+  dplyr::summarize(n=n())%>%
+  mutate(wat_detect = case_when(wat_detect == 1 ~ "detected",
+                   wat_detect == 0 ~ "undetected"))
+
+ggplot(water_quality_chart, aes(fill=wat_detect, x=Community.Type, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+water_quality_chart2 <- water_charts%>%
+  group_by(wat_detect, water_cait)%>%
+  dplyr::summarize(n=n())%>%
+  mutate(wat_detect = case_when(wat_detect == 1 ~ "detected",
+                   wat_detect == 0 ~ "undetected"))
+
+ggplot(water_quality_chart2, aes(fill=wat_detect, x=water_cait, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+#Toilet
+toilet_chart <- water_charts%>%
+  group_by(Community.Type, imp_toilet)%>%
+  dplyr::summarize(n=n())%>%
+  mutate(imp_toilet = case_when(imp_toilet == 1 ~ "improved",
+                   imp_toilet == 0 ~ "unimproved"))
+
+ggplot(toilet_chart, aes(fill=imp_toilet, x=Community.Type, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+toilet_chart2 <- water_charts%>%
+  group_by(Community.Type, toilet_type)%>%
+  dplyr::summarize(n=n())
+
+ggplot(toilet_chart2, aes(fill=toilet_type, x=Community.Type, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+#Floors
+floor_chart <- water_charts%>%
+  group_by(Community.Type, imp_floors)%>%
+  dplyr::summarize(n=n())%>%
+  mutate(imp_floors = case_when(imp_floors == 1 ~ "improved",
+                   imp_floors == 0 ~ "unimproved"))
+
+ggplot(floor_chart, aes(fill=imp_floors, x=Community.Type, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+floor_chart2 <- water_charts%>%
+  group_by(Community.Type, floors)%>%
+  dplyr::summarize(n=n())
+
+ggplot(floor_chart2, aes(fill=floors, x=Community.Type, y=n))+
+  geom_bar(position = "fill", stat="identity")+
+  viridis::scale_fill_viridis(discrete=T)
+
+```
+
+
+#For Kelsey
+```{r}
+# sequencing_complete <- read.csv("Import_files/16Scomplete_20240325.csv", na.strings=c("Undetermined","NA"))%>%
+#   mutate(HH.ID = substring(Barcode, 3,6),
+#          Age = substring(Barcode, 7,9))%>%
+#   mutate(HH.ID = as.numeric(HH.ID))
+# 
+# sequencing_metadata <- sequencing_complete%>%
+#   left_join(SurveyTACCombined2, by=c("HH.ID"="house_ID", "Age"))%>%
+#   distinct()
+# 
+# write.csv(sequencing_metadata, "Export_files/sequencing_metadata_20240325_06m.csv")
+```
+
+#missing samples
+```{r}
+I1_search <- I1_processed%>%
+  subset(visitn==4)%>%
+  subset(visitcomplete=="2.Yes")%>%
+  subset(sampletype==1)
+  subset(house_ID==1037 | house_ID==1046| house_ID==1047| house_ID==1048| house_ID==1136| house_ID==1140| house_ID==1148| house_ID==1149| house_ID==1150| house_ID==1226| house_ID==1233| house_ID==1234|house_ID==2017| house_ID==2037| house_ID==2131| house_ID==2133| house_ID==2237| house_ID==2338| house_ID==2409| house_ID==2413| house_ID==2414| house_ID==2415| house_ID==2416| house_ID==2417| house_ID==3018| house_ID==3214| house_ID==3303| house_ID==3304| house_ID==3305| house_ID==3306| house_ID==3307| house_ID==3308| house_ID==3309| house_ID==3310| house_ID==4017| house_ID==4018| house_ID==4019| house_ID==5006| house_ID==5007| house_ID==5011| house_ID==6026| house_ID==6027| house_ID==6028| house_ID==6029| house_ID==6030| house_ID==6031| house_ID==7020| house_ID==8015| house_ID==8026| house_ID==8027| house_ID==9001| house_ID==9102| house_ID==9103| house_ID==9104| house_ID==9105| house_ID==9106)
+
+childage2 <- childage%>%
+  subset(age_in_days <= 161.5 | age_in_days >= 203.5)
+
+SurveyTACCombined_precovid <- SurveyTACCombined2%>%
+  left_join(precovid, by=c("house_ID"))%>%
+  subset(post_covid == 0)
+
+d <- SurveyTACCombined_precovid %>%
+  select(-anyvirus) %>%
+  dplyr::rename(comm_type = Community.Type,
+         animal_score = animal_score_overall_child,
+         vacc4m = four_month_vaccines,
+         vacc6m = six_month_vaccines,
+         age_day = age_in_days,
+         anyinfection = Any_infection_noCOVID,
+         coinfection = Any_co_infection_noCOVID,
+         anyvirus = Any_virus_noCOVID,
+         numpathogens = Any_infection_noCOVID_number) %>%
+  mutate(comm_type = factor(comm_type, 
+                            levels = c("urban", "semi-urban",
+                                       "rural - road", "rural - river"),
+                            labels = c("Urban", "Semi-urban",
+                                       "Rural (road)", "Rural (river)")))
+
+#select outcomes
+outcomes <- c("anyinfection", "coinfection", "numpathogens", 
+              "anybacteria", "EAEC", "DAEC", "STEC", "aEPEC", "tEPEC", "EHEC", "ETEC", "EIEC_or_Shigella", "Campylobacter", "Salmonella", 
+              "anyvirus", "Adenovirus", "Astrovirus", "Enterovirus", "Norovirus", "Rotavirus", "Sapovirus", 
+              "anyparasite", "Ascaris", "Cryptosporidium", "Cyclospora_cayetanesis", "Entamoeba", "Giardia_18S", "Trichuris")
+
+exposures <- c("comm_type")
+
+library(gtsummary)
+
+table1 <- d %>%
+  select(all_of(exposures), all_of(outcomes)) %>%
+  tbl_summary(by = comm_type,
+              type = list(all_continuous() ~ "continuous2",
+                          numpathogens ~ "continuous2"),
+              statistic = all_continuous() ~ c("{median} ({p25}, {p75})", "{min}, {max}"),
+              missing_text = "Missing",
+              label = list(anyinfection ~ "Any pathogen",
+                            anybacteria ~ "Any bacterial pathogen",
+                            anyvirus ~ "Any viral pathogen",     
+                            anyparasite ~ "Any parasitic pathogen",   
+                            #zoonotic ~ "Any zoonotic pathogen",     
+                            coinfection ~ "Any co-infection",
+                            numpathogens ~ "Number of pathogens"),
+              digits = list(numpathogens ~ 0)) %>%
+  add_overall() %>%
+  modify_header(label ~ "**Variable**")
+
+table1 <- table1 %>%
+  as_flex_table() 
+
+flextable::save_as_docx(table1, path = "Figures/precovid_20240703.docx")
+  
+```
+
