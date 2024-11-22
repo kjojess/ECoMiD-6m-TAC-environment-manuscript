@@ -1,6 +1,6 @@
 ---
 title: "6m TAC NMDS"
-author: "Kelsey Jesser"
+author: "Kelsey Jesser, Nicolette Zhou, Caitlin Hemlock"
 date: "2/11/2024"
 output: html_document
 ---
