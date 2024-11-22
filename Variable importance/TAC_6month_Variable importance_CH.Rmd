@@ -1,6 +1,6 @@
 ---
 title: "Variable importance for Envt-TAC 6mo analyses"
-author: "Caitlin Hemlock"
+author: "Caitlin Hemlock, Kelsey Jesser, Nicolette Zhou"
 date: "Updated `r Sys.time()`"
 output: 
   html_document:
