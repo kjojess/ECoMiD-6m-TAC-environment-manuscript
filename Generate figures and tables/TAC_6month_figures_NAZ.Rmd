@@ -1,6 +1,6 @@
 ---
 title: "TAC_16S_6month_figures"
-author: "Nicolette Zhou"
+author: "Nicolette Zhou, Caitlin Hemlock, Kelsey Jesser"
 date: "2023-06-14"
 output: html_document
 editor_options: 
